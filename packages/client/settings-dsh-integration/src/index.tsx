@@ -42,6 +42,7 @@ Base URL: http://127.0.0.1:3210
 Auth: Authorization: Bearer <access-key>
 
 首选接口:
+- GET /api/capabilities (无需 access-key)
 - GET /api/tiggyknowledge/status
 - GET /api/tiggyknowledge/libraries
 - POST /api/tiggyknowledge/search
@@ -60,6 +61,7 @@ Auth: Authorization: Bearer <access-key>
 - knowledgeBaseIds 省略时表示全部知识库
 - topK 建议 1-20，服务端最大 50
 - maxCharacters 范围 1-100000
+- 回答引用来源时保留 reference.uri
 - 不启用知识库时，不注入上下文`
 
     const copyManualSummary = async (): Promise<void> => {
@@ -123,9 +125,10 @@ Content-Type: application/json`}</code></pre>
               </div>
               <div className="dsh-library-picker">
                 <div className="dsh-picker-heading">
-                  <div><strong>2. 公开只读接口</strong><span>统一使用 /api/tiggyknowledge/*，不保留历史兼容路径。</span></div>
+                  <div><strong>2. 公开只读接口</strong><span>先发现能力，再使用 /api/tiggyknowledge/* 读取知识。</span></div>
                 </div>
-                <pre className="dsh-config-preview"><code>{`GET  /api/tiggyknowledge/status
+                <pre className="dsh-config-preview"><code>{`GET  /api/capabilities（无需 Access Key）
+GET  /api/tiggyknowledge/status
 GET  /api/tiggyknowledge/libraries
 POST /api/tiggyknowledge/search
 GET  /api/tiggyknowledge/documents/:id/read?maxCharacters=20000
@@ -181,6 +184,7 @@ curl -H "Authorization: Bearer <access-key>" \\
     "documentId": "doc_xxx",
     "knowledgeBaseId": "kb_xxx",
     "title": "向量化方案",
+    "reference": { "uri": "tk://local/kb_xxx/doc_xxx" },
     "snippet": "...",
     "score": 12,
     "tags": []
@@ -194,6 +198,7 @@ curl -H "Authorization: Bearer <access-key>" \\
   "title": "向量化方案",
   "originalName": "vector.md",
   "sourceType": "markdown",
+  "reference": { "uri": "tk://local/kb_xxx/doc_xxx" },
   "content": "...",
   "truncated": false
 }`}</code></pre>
@@ -210,7 +215,7 @@ curl -H "Authorization: Bearer <access-key>" \\
                     <span><strong>再选知识库</strong><small>用户未指定时默认全部知识库；指定时按 knowledgeBaseIds 过滤。</small></span>
                   </div>
                   <div className="agent-manual-advice-item">
-                    <span><strong>最后读内容</strong><small>搜索适合找线索，读取适合拿原文，OKF 适合做引用和映射。</small></span>
+                    <span><strong>最后读内容</strong><small>搜索适合找线索，读取适合拿原文；回答时保留 tk://local/... 来源引用。</small></span>
                   </div>
                 </div>
               </div>

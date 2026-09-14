@@ -47,6 +47,7 @@ curl http://127.0.0.1:3210/api/capabilities
       { "id": "search", "method": "POST", "path": "/api/tiggyknowledge/search", "readOnly": true }
     ],
     "searchModes": ["keyword"],
+    "referenceSchemes": ["tk://local"],
     "write": false
   },
   "hostPlugins": []
@@ -185,6 +186,13 @@ curl -X POST http://127.0.0.1:3210/api/tiggyknowledge/search \
       "chunkId": "doc_01:0",
       "knowledgeBaseId": "kb_01",
       "documentId": "doc_01",
+      "reference": {
+        "uri": "tk://local/kb_01/doc_01",
+        "knowledgeBaseId": "kb_01",
+        "documentId": "doc_01",
+        "title": "向量化方案",
+        "sourceType": "markdown"
+      },
       "title": "向量化方案",
       "originalName": "vector-plan.md",
       "sourceType": "markdown",
@@ -223,6 +231,13 @@ curl -H "Authorization: Bearer <access-key>" \
   "title": "向量化方案",
   "originalName": "vector-plan.md",
   "sourceType": "markdown",
+  "reference": {
+    "uri": "tk://local/kb_01/doc_01",
+    "knowledgeBaseId": "kb_01",
+    "documentId": "doc_01",
+    "title": "向量化方案",
+    "sourceType": "markdown"
+  },
   "content": "文档正文...",
   "offset": 0,
   "returnedCharacters": 20000,
@@ -271,6 +286,7 @@ curl -H "Authorization: Bearer <access-key>" \
 | `maxCharacters` | `number` | 否 | 最多返回 OKF concept body 字符数，默认 20000，范围 1-100000。 |
 
 响应结构由当前 OKF mapping 插件提供，至少包含文档对应的 concept 信息和可引用正文。
+允许访问时，响应还包含与搜索和读取接口相同的 `reference` 对象。
 
 如果文档不在当前访问 Key 允许的知识库范围内，返回一个空 OKF 映射，其中 `concept.body` 为空，且不包含来源信息。
 
@@ -292,6 +308,8 @@ curl -H "Authorization: Bearer <access-key>" \
 4. 用户选择具体知识库时，搜索请求传对应 `knowledgeBaseIds`。
 5. 搜索只拿线索；需要回答依据时，再用 `knowledge_read` 或 `knowledge_okf` 读取正文。
 6. `knowledge_read` 返回 `hasMore: true` 时，继续传入响应中的 `nextOffset`，直到 `hasMore: false`。
+7. 回答中需要标注来源时，保留响应中的 `reference.uri`。本地引用格式为
+   `tk://local/<knowledgeBaseId>/<documentId>`，不绑定当前 HTTP 端口。
 
 ## 错误码
 

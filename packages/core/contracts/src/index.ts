@@ -368,6 +368,7 @@ export interface KnowledgeCapabilities {
   authentication: 'bearer'
   operations: KnowledgeCapabilityOperation[]
   searchModes: KnowledgeSearchMode[]
+  referenceSchemes: ['tk://local']
   write: false
 }
 
@@ -382,11 +383,30 @@ export interface DshKnowledgeLibraryList {
   items: KnowledgeLibrary[]
 }
 
+export interface KnowledgeSourceReference {
+  uri: `tk://local/${string}`
+  knowledgeBaseId: string
+  documentId: string
+  title: string
+  sourceType: KnowledgeDocumentSourceType
+}
+
 export interface DshKnowledgeSearchInput {
   query: string
   knowledgeBaseIds?: string[]
   topK?: number
   favoriteOnly?: boolean
+}
+
+export interface DshKnowledgeSearchResult extends KnowledgeSearchResult {
+  reference: KnowledgeSourceReference
+}
+
+export interface DshKnowledgeSearchResponse {
+  query: string
+  mode: 'keyword'
+  total: number
+  results: DshKnowledgeSearchResult[]
 }
 
 export interface DshKnowledgeReadResponse {
@@ -405,6 +425,11 @@ export interface DshKnowledgeReadResponse {
   truncated: boolean
   available?: boolean
   pageCount?: number
+  reference?: KnowledgeSourceReference
+}
+
+export interface DshKnowledgeOkfResponse extends KnowledgeOkfMapping {
+  reference?: KnowledgeSourceReference
 }
 
 export interface SystemSnapshot {

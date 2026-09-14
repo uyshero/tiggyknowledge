@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createCapabilitiesSnapshot } from '../src/index.ts'
+import { createCapabilitiesSnapshot, createKnowledgeSourceReference } from '../src/index.ts'
 
 describe('TiggyKnowledge capability discovery', () => {
   it('describes the read-only agent API and active search modes', () => {
@@ -29,6 +29,7 @@ describe('TiggyKnowledge capability discovery', () => {
           { id: 'okf', method: 'GET', path: '/api/tiggyknowledge/documents/:id/okf', readOnly: true },
         ],
         searchModes: ['keyword', 'semantic'],
+        referenceSchemes: ['tk://local'],
         write: false,
       },
       hostPlugins: [{
@@ -47,5 +48,20 @@ describe('TiggyKnowledge capability discovery', () => {
     expect(snapshot.capabilities.write).toBe(false)
     expect(snapshot.capabilities.operations.every(operation => operation.readOnly)).toBe(true)
     expect(snapshot.capabilities.operations.map(operation => operation.id)).not.toContain('write')
+  })
+
+  it('creates a stable encoded local citation without endpoint details', () => {
+    expect(createKnowledgeSourceReference({
+      id: 'document/一',
+      libraryId: 'library one',
+      title: '引用测试',
+      sourceType: 'markdown',
+    })).toEqual({
+      uri: 'tk://local/library%20one/document%2F%E4%B8%80',
+      knowledgeBaseId: 'library one',
+      documentId: 'document/一',
+      title: '引用测试',
+      sourceType: 'markdown',
+    })
   })
 })

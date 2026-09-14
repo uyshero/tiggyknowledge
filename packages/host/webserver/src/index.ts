@@ -10,8 +10,10 @@ import type {
   CreateKnowledgeNoteInput,
   DeleteKnowledgeDocumentsInput,
   DshKnowledgeLibraryList,
+  DshKnowledgeOkfResponse,
   DshKnowledgeReadResponse,
   DshKnowledgeSearchInput,
+  DshKnowledgeSearchResponse,
   DshKnowledgeStatus,
   GenerateDshIntegrationAccessKeyResult,
   KnowledgeDocument,
@@ -22,6 +24,7 @@ import type {
   KnowledgeMetadataDocumentList,
   KnowledgeOkfMapping,
   KnowledgeQuery,
+  KnowledgeSourceReference,
   KnowledgeTagList,
   RenameKnowledgeTagInput,
   SetKnowledgeDocumentFavoriteInput,
@@ -131,9 +134,24 @@ export function createCapabilitiesSnapshot(
         { id: 'okf', method: 'GET', path: '/api/tiggyknowledge/documents/:id/okf', readOnly: true },
       ],
       searchModes: [...new Set(searchModes)],
+      referenceSchemes: ['tk://local'],
       write: false,
     },
     hostPlugins,
+  }
+}
+
+export function createKnowledgeSourceReference(
+  document: Pick<KnowledgeDocument, 'id' | 'libraryId' | 'title' | 'sourceType'>,
+): KnowledgeSourceReference {
+  const libraryId = encodeURIComponent(document.libraryId)
+  const documentId = encodeURIComponent(document.id)
+  return {
+    uri: `tk://local/${libraryId}/${documentId}`,
+    knowledgeBaseId: document.libraryId,
+    documentId: document.id,
+    title: document.title,
+    sourceType: document.sourceType,
   }
 }
 
@@ -284,12 +302,25 @@ export class WebServer extends Service {
       this.assertTiggyKnowledgeAccess(request)
       const input = await this.readJson<DshKnowledgeSearchInput>(request)
       try {
-        this.json(response, this.ctx.knowledgeQuery.search({
+        const search = this.ctx.knowledgeQuery.search({
           text: input.query,
           knowledgeBaseIds: this.resolveTiggyKnowledgeSearchLibraryIds(input.knowledgeBaseIds),
           ...(input.topK === undefined ? {} : { topK: input.topK }),
           ...(input.favoriteOnly === undefined ? {} : { favoriteOnly: input.favoriteOnly }),
-        }))
+        })
+        const result: DshKnowledgeSearchResponse = {
+          ...search,
+          results: search.results.map(item => ({
+            ...item,
+            reference: createKnowledgeSourceReference({
+              id: item.documentId,
+              libraryId: item.knowledgeBaseId,
+              title: item.title,
+              sourceType: item.sourceType,
+            }),
+          })),
+        }
+        this.json(response, result)
       } catch (error) {
         if (error instanceof RangeError) throw new HttpError(400, 'invalid_tiggyknowledge_query', error.message)
         throw error
@@ -317,6 +348,7 @@ export class WebServer extends Service {
           originalName: preview.document.originalName,
           sourceType: preview.document.sourceType,
           ...page,
+          reference: createKnowledgeSourceReference(preview.document),
           ...(preview.pageCount === undefined ? {} : { pageCount: preview.pageCount }),
         }
         this.json(response, result)
@@ -339,7 +371,12 @@ export class WebServer extends Service {
       try {
         const mapping = await this.ctx.knowledgeOkf.mapping(documentId)
         mapping.concept.body = mapping.concept.body.slice(0, maxCharacters)
-        this.json(response, mapping)
+        const document = this.findTiggyKnowledgeDocument(documentId)
+        const result: DshKnowledgeOkfResponse = {
+          ...mapping,
+          ...(document === undefined ? {} : { reference: createKnowledgeSourceReference(document) }),
+        }
+        this.json(response, result)
       } catch (error) {
         if (error instanceof RangeError) throw new HttpError(404, 'document_not_found', error.message)
         throw error

@@ -36,6 +36,11 @@ first when the endpoint may be remote or may expose optional search providers; i
 reports the protocol version, read-only operations, and enabled search modes. The
 remaining tools still require the configured Bearer access key.
 
+Search and read rendering includes the stable citation returned by the API, for
+example `tk://local/<knowledgeBaseId>/<documentId>`. Agents should preserve this
+URI when attributing an answer; it remains independent of the configured HTTP
+endpoint and port.
+
 When DSH mounts its settings service, the connector also registers a `tiggyknowledge` settings namespace. This exposes `endpoint` and enabled read-only tools to DSH settings/configuration clients; the legacy literal `token` field is marked as a secret and should be left empty. The connector treats `endpoint` as the Base URL and appends the standard `/api/tiggyknowledge/*` paths. Knowledge-base scope is selected per prompt: omit `knowledgeBaseIds` to search all knowledge bases, or pass explicit ids from the composer picker.
 
 For local development, use `deepseek-harness.local.patch.yml` from the `deepseek-harness` repo:

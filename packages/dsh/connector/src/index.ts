@@ -60,6 +60,7 @@ interface SearchResult {
   score: number
   tags: { name: string }[]
   isFavorite: boolean
+  reference: SourceReference
 }
 
 interface SearchResponse {
@@ -85,6 +86,15 @@ interface ReadResponse {
   truncated: boolean
   available?: boolean
   pageCount?: number
+  reference?: SourceReference
+}
+
+interface SourceReference {
+  uri: string
+  knowledgeBaseId: string
+  documentId: string
+  title: string
+  sourceType: 'text' | 'markdown' | 'pdf'
 }
 
 interface CredentialProviderLike {
@@ -246,6 +256,7 @@ export function apply(ctx: Context, config: Config): void {
               : search.results.map(result => [
               `- ${result.title} (${result.documentId})`,
               `  library: ${result.knowledgeBaseId}; source: ${result.sourceType}; score: ${result.score}`,
+              `  citation: ${result.reference.uri}`,
               `  snippet: ${result.snippet}`,
             ].join('\n')).join('\n'),
           }]
@@ -285,6 +296,7 @@ export function apply(ctx: Context, config: Config): void {
             text: [
             `${read.title} (${read.documentId})`,
             `library: ${read.knowledgeBaseId}; source: ${read.sourceType}`,
+            ...(read.reference === undefined ? [] : [`citation: ${read.reference.uri}`]),
             `characters: ${read.offset}-${read.offset + read.returnedCharacters} of ${read.totalCharacters}; hasMore: ${String(read.hasMore)}`,
             ...(read.hasMore && read.nextOffset !== undefined
               ? [`Continue with knowledge_read using documentId ${JSON.stringify(read.documentId)} and offset ${read.nextOffset}.`]

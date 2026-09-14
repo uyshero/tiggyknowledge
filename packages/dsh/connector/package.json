@@ -5,6 +5,10 @@
   "type": "module",
   "main": "lib/types/index.js",
   "types": "lib/types/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prepack": "tsc -p tsconfig.json"
+  },
   "exports": { ".": { "types": "./lib/types/index.d.ts", "default": "./lib/types/index.js" } },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",

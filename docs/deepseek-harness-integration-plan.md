@@ -326,6 +326,7 @@ OKF 是 tiggyknowledge 和 DSH 之间的长期数据协议候选。
 - 后端新增 `PUT /api/settings/agent-integration`，配置持久化到本地 `settings.yaml`。
 - 后端新增 `POST /api/settings/agent-integration/access-key`，用于轮换访问 Key。
 - 后端新增智能体标准只读 API：`/api/tiggyknowledge/status`、`/api/tiggyknowledge/libraries`、`/api/tiggyknowledge/search`、`/api/tiggyknowledge/documents/:id/read`、`/api/tiggyknowledge/documents/:id/okf`。
+- 后端新增公开能力发现 API：`/api/capabilities`，并让 search/read/okf 返回稳定的 `tk://local/...` 来源引用。
 - 不再保留 `/api/dsh/*` 或 `/api/agent/*` 兼容路径；DSH connector 作为参考实现也调用标准路径。
 - 新增外部 connector 源码包：`packages/dsh/connector`，导出 `@tiggyknowledge/dsh-connector`，注册 `knowledge_status`、`knowledge_list_libraries`、`knowledge_search`、`knowledge_read`、`knowledge_okf`。
 
