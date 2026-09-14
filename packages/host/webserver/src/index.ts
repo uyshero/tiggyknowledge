@@ -5,6 +5,7 @@ import { Context, Service } from '@deepseek-ai/cordis'
 import type {} from '@tiggyknowledge/catalog-sqlite'
 import type {} from '@tiggyknowledge/client-bootstrap'
 import type {
+  CapabilitiesSnapshot,
   CreateKnowledgeLibraryInput,
   CreateKnowledgeNoteInput,
   DeleteKnowledgeDocumentsInput,
@@ -14,6 +15,7 @@ import type {
   DshKnowledgeStatus,
   GenerateDshIntegrationAccessKeyResult,
   KnowledgeDocument,
+  KnowledgeCapabilities,
   KnowledgeGraphQuery,
   KnowledgeLibrary,
   KnowledgeLibraryList,
@@ -110,6 +112,31 @@ export function paginateContent(
   }
 }
 
+export function createCapabilitiesSnapshot(
+  searchModes: KnowledgeCapabilities['searchModes'],
+  hostPlugins: CapabilitiesSnapshot['hostPlugins'],
+): CapabilitiesSnapshot {
+  return {
+    product: 'tiggyknowledge',
+    version: '0.0.1',
+    capabilities: {
+      protocolVersion: 1,
+      basePath: '/api/tiggyknowledge',
+      authentication: 'bearer',
+      operations: [
+        { id: 'status', method: 'GET', path: '/api/tiggyknowledge/status', readOnly: true },
+        { id: 'libraries', method: 'GET', path: '/api/tiggyknowledge/libraries', readOnly: true },
+        { id: 'search', method: 'POST', path: '/api/tiggyknowledge/search', readOnly: true },
+        { id: 'read', method: 'GET', path: '/api/tiggyknowledge/documents/:id/read', readOnly: true },
+        { id: 'okf', method: 'GET', path: '/api/tiggyknowledge/documents/:id/okf', readOnly: true },
+      ],
+      searchModes: [...new Set(searchModes)],
+      write: false,
+    },
+    hostPlugins,
+  }
+}
+
 function extensionOf(path: string): string {
   const at = path.lastIndexOf('.')
   return at < 0 ? '' : path.slice(at)
@@ -175,6 +202,14 @@ export class WebServer extends Service {
     if (pathname === '/api/health') {
       if (method !== 'GET') return this.methodNotAllowed(response, ['GET'])
       this.json(response, { status: 'ok' })
+      return
+    }
+    if (pathname === '/api/capabilities') {
+      if (method !== 'GET') return this.methodNotAllowed(response, ['GET'])
+      this.json(response, createCapabilitiesSnapshot(
+        this.ctx.knowledgeSemanticCapabilities.snapshot().enabledModes,
+        this.ctx.pluginInventory.list(),
+      ))
       return
     }
     if (pathname === '/api/system') {

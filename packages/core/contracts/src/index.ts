@@ -353,6 +353,31 @@ export interface DshKnowledgeStatus {
   }
 }
 
+export type KnowledgeCapabilityOperationId = 'status' | 'libraries' | 'search' | 'read' | 'okf'
+
+export interface KnowledgeCapabilityOperation {
+  id: KnowledgeCapabilityOperationId
+  method: 'GET' | 'POST'
+  path: string
+  readOnly: true
+}
+
+export interface KnowledgeCapabilities {
+  protocolVersion: 1
+  basePath: '/api/tiggyknowledge'
+  authentication: 'bearer'
+  operations: KnowledgeCapabilityOperation[]
+  searchModes: KnowledgeSearchMode[]
+  write: false
+}
+
+export interface CapabilitiesSnapshot {
+  product: 'tiggyknowledge'
+  version: string
+  capabilities: KnowledgeCapabilities
+  hostPlugins: PluginInventoryEntry[]
+}
+
 export interface DshKnowledgeLibraryList {
   items: KnowledgeLibrary[]
 }

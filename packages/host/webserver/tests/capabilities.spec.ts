@@ -1,0 +1,51 @@
+import { describe, expect, it } from 'vitest'
+import { createCapabilitiesSnapshot } from '../src/index.ts'
+
+describe('TiggyKnowledge capability discovery', () => {
+  it('describes the read-only agent API and active search modes', () => {
+    const snapshot = createCapabilitiesSnapshot(
+      ['keyword', 'semantic', 'keyword'],
+      [{
+        entryId: 'plugin-1',
+        moduleName: '@tiggyknowledge/query',
+        face: 'host',
+        enabled: true,
+        phase: 'active',
+      }],
+    )
+
+    expect(snapshot).toEqual({
+      product: 'tiggyknowledge',
+      version: '0.0.1',
+      capabilities: {
+        protocolVersion: 1,
+        basePath: '/api/tiggyknowledge',
+        authentication: 'bearer',
+        operations: [
+          { id: 'status', method: 'GET', path: '/api/tiggyknowledge/status', readOnly: true },
+          { id: 'libraries', method: 'GET', path: '/api/tiggyknowledge/libraries', readOnly: true },
+          { id: 'search', method: 'POST', path: '/api/tiggyknowledge/search', readOnly: true },
+          { id: 'read', method: 'GET', path: '/api/tiggyknowledge/documents/:id/read', readOnly: true },
+          { id: 'okf', method: 'GET', path: '/api/tiggyknowledge/documents/:id/okf', readOnly: true },
+        ],
+        searchModes: ['keyword', 'semantic'],
+        write: false,
+      },
+      hostPlugins: [{
+        entryId: 'plugin-1',
+        moduleName: '@tiggyknowledge/query',
+        face: 'host',
+        enabled: true,
+        phase: 'active',
+      }],
+    })
+  })
+
+  it('does not advertise write operations', () => {
+    const snapshot = createCapabilitiesSnapshot(['keyword'], [])
+
+    expect(snapshot.capabilities.write).toBe(false)
+    expect(snapshot.capabilities.operations.every(operation => operation.readOnly)).toBe(true)
+    expect(snapshot.capabilities.operations.map(operation => operation.id)).not.toContain('write')
+  })
+})

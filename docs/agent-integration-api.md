@@ -24,6 +24,35 @@ https://knowledge.example.com
 http://127.0.0.1:3210/api/tiggyknowledge/search
 ```
 
+## GET /api/capabilities
+
+客户端可以先读取能力声明，再决定是否启用智能体工具。该接口不返回知识库内容，
+不需要访问 Key。
+
+```bash
+curl http://127.0.0.1:3210/api/capabilities
+```
+
+响应包含协议版本、认证方式、只读操作列表和当前可用的搜索模式。例如：
+
+```json
+{
+  "product": "tiggyknowledge",
+  "version": "0.0.1",
+  "capabilities": {
+    "protocolVersion": 1,
+    "basePath": "/api/tiggyknowledge",
+    "authentication": "bearer",
+    "operations": [
+      { "id": "search", "method": "POST", "path": "/api/tiggyknowledge/search", "readOnly": true }
+    ],
+    "searchModes": ["keyword"],
+    "write": false
+  },
+  "hostPlugins": []
+}
+```
+
 ## 认证
 
 公开只读接口统一使用 Bearer Token：
