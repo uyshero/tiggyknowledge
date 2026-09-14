@@ -10,7 +10,8 @@
     "build": "tsc -p tsconfig.json",
     "start": "electron .",
     "pack-resources": "node scripts/prepare.mjs",
-    "package": "pnpm run pack-resources && electron-builder"
+    "package": "pnpm run pack-resources && electron-builder",
+    "package:win": "pnpm run pack-resources && electron-builder --win nsis --x64"
   },
   "devDependencies": {
     "@tiggyknowledge/cli": "workspace:^",

@@ -9,9 +9,10 @@ const desktopRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const workspaceRoot = resolve(desktopRoot, '../..')
 const projectRoot = resolve(desktopRoot, '.packaged/project')
 const deployRoot = resolve(tmpdir(), `tiggyknowledge-deploy-${process.pid}-${Date.now()}`)
+const pnpmCommand = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm'
 
 await rm(projectRoot, { recursive: true, force: true })
-execFileSync('pnpm', ['deploy', '--filter', '@tiggyknowledge/cli', '--prod', deployRoot, '--legacy', '--config.confirmModulesPurge=false'], {
+execFileSync(pnpmCommand, ['deploy', '--filter', '@tiggyknowledge/cli', '--prod', deployRoot, '--legacy', '--config.confirmModulesPurge=false'], {
   cwd: workspaceRoot,
   env: { ...process.env, CI: 'true' },
   stdio: 'inherit',

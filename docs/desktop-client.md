@@ -33,9 +33,22 @@ to use the same `/api/tiggyknowledge/*` HTTP contract.
 ## Packaging status
 
 `pnpm desktop:dist` prepares a standalone Host resource tree and invokes
-Electron Builder for macOS, Windows, and Linux targets. Code signing and
-automatic update publishing still need to be configured before distributing
-installers.
+Electron Builder for the current platform. Code signing and automatic update
+publishing still need to be configured before distributing installers.
+
+To build the Windows installer explicitly from the repository root, run:
+
+```sh
+pnpm desktop:win
+```
+
+The NSIS installer is emitted under `apps/desktop/dist/`, typically as
+`TiggyKnowledge Setup 0.0.1.exe`. Run this command on Windows for the most
+reliable result. macOS can cross-build the Windows target only when the
+required Electron Builder Wine tooling is installed; otherwise use a Windows
+build machine or CI runner. The first Windows build may be unsigned, so
+Windows SmartScreen can show an “unknown publisher” warning until a code-signing
+certificate is configured.
 
 The macOS DMG is emitted at `apps/desktop/dist/TiggyKnowledge-0.0.1.dmg`.
 The local build has been verified by launching the packaged app and checking

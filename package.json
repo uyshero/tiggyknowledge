@@ -17,6 +17,7 @@
     "desktop:build": "pnpm run build && pnpm --filter @tiggyknowledge/desktop build",
     "desktop:dev": "pnpm run desktop:build && pnpm --filter @tiggyknowledge/desktop start",
     "desktop:dist": "pnpm run desktop:build && pnpm --filter @tiggyknowledge/desktop package",
+    "desktop:win": "pnpm run desktop:build && pnpm --filter @tiggyknowledge/desktop package:win",
     "test": "vitest run",
     "typecheck": "tsc -b tsconfig.host.json tsconfig.client.json",
     "check": "pnpm run typecheck && pnpm run test && pnpm run build"
