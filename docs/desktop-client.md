@@ -30,3 +30,8 @@ to use the same `/api/tiggyknowledge/*` HTTP contract.
 Electron Builder for macOS, Windows, and Linux targets. Code signing and
 automatic update publishing still need to be configured before distributing
 installers.
+
+The macOS DMG is emitted at `apps/desktop/dist/TiggyKnowledge-0.0.1.dmg`.
+The local build has been verified by launching the packaged app and checking
+`GET /api/health`; it is currently unsigned and will show the usual macOS
+unidentified-developer warning until a Developer ID certificate is configured.
