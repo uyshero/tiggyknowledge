@@ -18,6 +18,18 @@ Open `http://127.0.0.1:3210`. Runtime data is written under `app-data/`.
 The shipped Host composition is `packages/bundle/local/cordis.patch.yml`.
 Additional structural overrides can be supplied with `--patch <path>`.
 
+## Desktop client
+
+The Electron desktop shell reuses the Host and Web UI while keeping Node.js
+disabled in the renderer. Start it with:
+
+```sh
+pnpm desktop:dev
+```
+
+See [desktop client](docs/desktop-client.md) for data location, port, DSH
+integration, and packaging details.
+
 ## Planning
 
 - [deepseek harness integration plan](docs/deepseek-harness-integration-plan.md)

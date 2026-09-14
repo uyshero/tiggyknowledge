@@ -5,17 +5,17 @@
     - id: knowledge-catalog
       name: '@tiggyknowledge/catalog-sqlite'
       config:
-        dataDir: !!js ctx.projectRoot + '/app-data'
+        dataDir: !!js ctx.dataRoot
 
     - id: knowledge-content
       name: '@tiggyknowledge/content-local'
       config:
-        dataDir: !!js ctx.projectRoot + '/app-data'
+        dataDir: !!js ctx.dataRoot
 
     - id: knowledge-metadata-store
       name: '@tiggyknowledge/metadata-sqlite'
       config:
-        dataDir: !!js ctx.projectRoot + '/app-data'
+        dataDir: !!js ctx.dataRoot
 
     - id: text-producer
       name: '@tiggyknowledge/producer-text'
@@ -29,7 +29,7 @@
     - id: fts-index
       name: '@tiggyknowledge/index-fts'
       config:
-        dataDir: !!js ctx.projectRoot + '/app-data'
+        dataDir: !!js ctx.dataRoot
 
     - id: ingestion
       name: '@tiggyknowledge/ingestion'
@@ -71,7 +71,7 @@
     - id: settings
       name: '@tiggyknowledge/settings-file'
       config:
-        path: !!js ctx.projectRoot + '/app-data/settings.yaml'
+        path: !!js ctx.dataRoot + '/settings.yaml'
 
     - id: storage-manager
       name: '@tiggyknowledge/storage-manager'
@@ -164,5 +164,5 @@
       name: '@tiggyknowledge/webserver'
       config:
         host: 127.0.0.1
-        port: !!js Number(process.env.TIGGYKNOWLEDGE_PORT ?? 3210)
-        distRoot: !!js ctx.projectRoot + '/apps/web/dist'
+        port: !!js ctx.webPort
+        distRoot: !!js ctx.webDistRoot

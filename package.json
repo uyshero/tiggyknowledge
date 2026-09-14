@@ -14,6 +14,9 @@
     "pack:dsh": "mkdir -p dist/dsh && npm pack packages/dsh/connector --pack-destination dist/dsh && npm pack packages/dsh/context --pack-destination dist/dsh",
     "dev": "pnpm run build && node apps/cli/lib/index.js",
     "start": "node apps/cli/lib/index.js",
+    "desktop:build": "pnpm run build && pnpm --filter @tiggyknowledge/desktop build",
+    "desktop:dev": "pnpm run desktop:build && pnpm --filter @tiggyknowledge/desktop start",
+    "desktop:dist": "pnpm run desktop:build && pnpm --filter @tiggyknowledge/desktop package",
     "test": "vitest run",
     "typecheck": "tsc -b tsconfig.host.json tsconfig.client.json",
     "check": "pnpm run typecheck && pnpm run test && pnpm run build"

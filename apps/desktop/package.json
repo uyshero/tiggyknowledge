@@ -1,0 +1,50 @@
+{
+  "name": "@tiggyknowledge/desktop",
+  "version": "0.0.1",
+  "description": "Desktop client for the local-first TiggyKnowledge knowledge base",
+  "author": "TiggyKnowledge",
+  "private": true,
+  "type": "module",
+  "main": "lib/main.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "electron .",
+    "pack-resources": "node scripts/prepare.mjs",
+    "package": "pnpm run pack-resources && electron-builder"
+  },
+  "devDependencies": {
+    "@tiggyknowledge/cli": "workspace:^",
+    "@tiggyknowledge/webserver": "workspace:^",
+    "@types/node": "^22.20.0",
+    "electron": "^38.1.0",
+    "electron-builder": "^26.0.12",
+    "typescript": "^6.0.3"
+  },
+  "build": {
+    "appId": "ai.deepseek.tiggyknowledge",
+    "productName": "TiggyKnowledge",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "lib/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": ".packaged/project",
+        "to": "project"
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": ["dmg"]
+    },
+    "linux": {
+      "target": ["AppImage"]
+    },
+    "win": {
+      "target": ["nsis"]
+    }
+  }
+}

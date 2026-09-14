@@ -9,10 +9,20 @@ import { composeEntries, parseArguments } from './config.ts'
 declare module '@deepseek-ai/cordis' {
   interface Context {
     projectRoot: string
+    dataRoot: string
+    webDistRoot: string
+    webPort: number
   }
 }
 
 export const PROJECT_ROOT = fileURLToPath(new URL('../../../', import.meta.url))
+
+export interface BootOptions {
+  projectRoot?: string
+  dataRoot?: string
+  distRoot?: string
+  port?: number
+}
 
 function formatError(error: unknown, indent = ''): string {
   if (error instanceof AggregateError) {
@@ -23,9 +33,13 @@ function formatError(error: unknown, indent = ''): string {
   return `${indent}${error instanceof Error ? error.message : String(error)}`
 }
 
-export async function boot(patchFiles: string[] = []): Promise<Context> {
-  const bundle = resolve(PROJECT_ROOT, 'packages/bundle/local/cordis.patch.yml')
-  const profile = resolve(PROJECT_ROOT, 'app-data/profiles/local/cordis.patch.yml')
+export async function boot(patchFiles: string[] = [], options: BootOptions = {}): Promise<Context> {
+  const projectRoot = resolve(options.projectRoot ?? PROJECT_ROOT)
+  const dataRoot = resolve(options.dataRoot ?? resolve(projectRoot, 'app-data'))
+  const distRoot = resolve(options.distRoot ?? resolve(projectRoot, 'apps/web/dist'))
+  const port = options.port ?? Number(process.env.TIGGYKNOWLEDGE_PORT ?? 3210)
+  const bundle = resolve(projectRoot, 'packages/bundle/local/cordis.patch.yml')
+  const profile = resolve(dataRoot, 'profiles/local/cordis.patch.yml')
   const entries = composeEntries([
     { filename: bundle },
     { filename: profile, required: false },
@@ -33,9 +47,12 @@ export async function boot(patchFiles: string[] = []): Promise<Context> {
   ])
 
   const ctx = new Context()
-  const baseUrl = pathToFileURL(resolve(PROJECT_ROOT, 'apps/cli/package.json')).href
+  const baseUrl = pathToFileURL(resolve(projectRoot, 'package.json')).href
   ctx.baseUrl = baseUrl
-  ctx.provide('projectRoot', PROJECT_ROOT)
+  ctx.provide('projectRoot', projectRoot)
+  ctx.provide('dataRoot', dataRoot)
+  ctx.provide('webDistRoot', distRoot)
+  ctx.provide('webPort', port)
   try {
     await ctx.plugin(Loader, { baseUrl })
     await ctx.loader.root.update(entries)

@@ -14,6 +14,8 @@ peerDependencyRules:
     typescript: '>=5 <7'
 
 allowBuilds:
+  electron: true
+  electron-winstaller: true
   esbuild: true
   node-pty: true
   node-addon-require-builtin: false
