@@ -1,0 +1,35 @@
+{
+  "name": "@tiggyknowledge/root",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.7.0",
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0"
+  },
+  "scripts": {
+    "build": "pnpm run build:lib && pnpm run build:web",
+    "build:lib": "tsc -b tsconfig.host.json tsconfig.client.json && tsdown",
+    "build:web": "pnpm --filter @tiggyknowledge/web build",
+    "pack:dsh": "mkdir -p dist/dsh && npm pack packages/dsh/connector --pack-destination dist/dsh && npm pack packages/dsh/context --pack-destination dist/dsh",
+    "dev": "pnpm run build && node apps/cli/lib/index.js",
+    "start": "node apps/cli/lib/index.js",
+    "test": "vitest run",
+    "typecheck": "tsc -b tsconfig.host.json tsconfig.client.json",
+    "check": "pnpm run typecheck && pnpm run test && pnpm run build"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^22.20.0",
+    "@types/react": "~18.3.1",
+    "@types/react-dom": "~18.3.0",
+    "@vitejs/plugin-react": "^4.0.0",
+    "jsdom": "^26.0.0",
+    "tsdown": "^0.22.2",
+    "tsx": "^4.22.4",
+    "typescript": "^6.0.3",
+    "vite": "^6.0.0",
+    "vite-tsconfig-paths": "^6.1.1",
+    "vitest": "^4.1.8"
+  }
+}

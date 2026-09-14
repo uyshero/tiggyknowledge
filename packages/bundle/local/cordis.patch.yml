@@ -1,0 +1,168 @@
+- insert:
+    - id: logger-console
+      name: '@deepseek-ai/cordis-plugin-logger-console'
+
+    - id: knowledge-catalog
+      name: '@tiggyknowledge/catalog-sqlite'
+      config:
+        dataDir: !!js ctx.projectRoot + '/app-data'
+
+    - id: knowledge-content
+      name: '@tiggyknowledge/content-local'
+      config:
+        dataDir: !!js ctx.projectRoot + '/app-data'
+
+    - id: knowledge-metadata-store
+      name: '@tiggyknowledge/metadata-sqlite'
+      config:
+        dataDir: !!js ctx.projectRoot + '/app-data'
+
+    - id: text-producer
+      name: '@tiggyknowledge/producer-text'
+
+    - id: pdf-producer
+      name: '@tiggyknowledge/producer-pdf'
+
+    - id: basic-chunker
+      name: '@tiggyknowledge/chunker-basic'
+
+    - id: fts-index
+      name: '@tiggyknowledge/index-fts'
+      config:
+        dataDir: !!js ctx.projectRoot + '/app-data'
+
+    - id: ingestion
+      name: '@tiggyknowledge/ingestion'
+
+    - id: text-preview
+      name: '@tiggyknowledge/preview-text'
+
+    - id: pdf-preview
+      name: '@tiggyknowledge/preview-pdf'
+
+    - id: knowledge-documents
+      name: '@tiggyknowledge/documents'
+
+    - id: document-metadata
+      name: '@tiggyknowledge/document-metadata'
+
+    - id: knowledge-graph
+      name: '@tiggyknowledge/graph'
+      disabled: true
+
+    - id: ingestion-tags
+      name: '@tiggyknowledge/ingestion-tags'
+
+    - id: note-creator
+      name: '@tiggyknowledge/note-creator'
+
+    - id: knowledge-okf
+      name: '@tiggyknowledge/okf'
+
+    - id: okf-export
+      name: '@tiggyknowledge/okf-export'
+
+    - id: semantic-capabilities
+      name: '@tiggyknowledge/semantic-capabilities'
+
+    - id: knowledge-query
+      name: '@tiggyknowledge/query'
+
+    - id: settings
+      name: '@tiggyknowledge/settings-file'
+      config:
+        path: !!js ctx.projectRoot + '/app-data/settings.yaml'
+
+    - id: storage-manager
+      name: '@tiggyknowledge/storage-manager'
+
+    - id: client-bootstrap
+      name: '@tiggyknowledge/client-bootstrap'
+      config:
+        plugins:
+          - id: client-connection
+            moduleName: '@tiggyknowledge/client-connection'
+            label: Connection
+            description: Host API connection
+          - id: client-runtime
+            moduleName: '@tiggyknowledge/client-runtime'
+            label: Runtime
+            description: Page registry and client runtime state
+          - id: client-ui-knowledge
+            moduleName: '@tiggyknowledge/client-ui-knowledge'
+            label: Knowledge
+            description: Knowledge library workbench
+          - id: client-note-create
+            moduleName: '@tiggyknowledge/client-note-create'
+            label: Note Creator
+            description: Markdown knowledge note creation
+          - id: client-ui-ingestion
+            moduleName: '@tiggyknowledge/client-ui-ingestion'
+            label: Ingestion
+            description: Batch upload workbench
+          - id: client-ui-documents
+            moduleName: '@tiggyknowledge/client-ui-documents'
+            label: Documents
+            description: Document list and preview workbench
+          - id: client-inspector-okf
+            moduleName: '@tiggyknowledge/client-inspector-okf'
+            label: OKF Inspector
+            description: Runtime OKF concept and source mapping
+          - id: client-action-okf-export
+            moduleName: '@tiggyknowledge/client-action-okf-export'
+            label: OKF Export
+            description: Knowledge library OKF Bundle export action
+          - id: client-preview-pdf
+            moduleName: '@tiggyknowledge/client-preview-pdf'
+            label: PDF Preview
+            description: Visual PDF page renderer
+          - id: client-ui-tags
+            moduleName: '@tiggyknowledge/client-ui-tags'
+            label: Tags
+            description: Tag browser and filtered documents
+          - id: client-ui-favorites
+            moduleName: '@tiggyknowledge/client-ui-favorites'
+            label: Favorites
+            description: Favorite documents workbench
+          - id: client-ui-search
+            moduleName: '@tiggyknowledge/client-ui-search'
+            label: Search
+            description: Keyword search workbench
+          - id: client-ui-settings
+            moduleName: '@tiggyknowledge/client-ui-settings'
+            label: Settings
+            description: Settings page shell
+          - id: client-settings-general
+            moduleName: '@tiggyknowledge/client-settings-general'
+            label: General Settings
+            description: General settings panel
+          - id: client-settings-storage
+            moduleName: '@tiggyknowledge/client-settings-storage'
+            label: Storage Settings
+            description: Local storage settings panel
+          - id: client-settings-config
+            moduleName: '@tiggyknowledge/client-settings-config'
+            label: Plugin Configuration
+            description: Plugin configuration panel
+          - id: client-settings-dsh-integration
+            moduleName: '@tiggyknowledge/client-settings-dsh-integration'
+            label: 智能体集成
+            description: 智能体接入与只读知识库配置
+          - id: client-settings-plugins
+            moduleName: '@tiggyknowledge/client-settings-plugins'
+            label: Plugin Inventory
+            description: Plugin inventory settings panel
+          - id: client-ui-layout
+            moduleName: '@tiggyknowledge/client-ui-layout'
+            label: Layout
+            description: Application shell and React renderer
+
+    - id: plugin-inventory
+      name: '@tiggyknowledge/plugin-inventory'
+
+    - id: webserver
+      name: '@tiggyknowledge/webserver'
+      config:
+        host: 127.0.0.1
+        port: !!js Number(process.env.TIGGYKNOWLEDGE_PORT ?? 3210)
+        distRoot: !!js ctx.projectRoot + '/apps/web/dist'

@@ -1,0 +1,49 @@
+{
+  "name": "@tiggyknowledge/webserver",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "workspace:^",
+    "@tiggyknowledge/catalog-sqlite": "workspace:^",
+    "@tiggyknowledge/client-bootstrap": "workspace:^",
+    "@tiggyknowledge/documents": "workspace:^",
+    "@tiggyknowledge/document-metadata": "workspace:^",
+    "@tiggyknowledge/ingestion-tags": "workspace:^",
+    "@tiggyknowledge/note-creator": "workspace:^",
+    "@tiggyknowledge/okf": "workspace:^",
+    "@tiggyknowledge/okf-export": "workspace:^",
+    "@tiggyknowledge/plugin-inventory": "workspace:^",
+    "@tiggyknowledge/query": "workspace:^",
+    "@tiggyknowledge/preview-text": "workspace:^",
+    "@tiggyknowledge/semantic-capabilities": "workspace:^",
+    "@tiggyknowledge/settings-file": "workspace:^",
+    "@tiggyknowledge/storage-manager": "workspace:^"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "workspace:^",
+    "@tiggyknowledge/catalog-sqlite": "workspace:^",
+    "@tiggyknowledge/client-bootstrap": "workspace:^",
+    "@tiggyknowledge/contracts": "workspace:^",
+    "@tiggyknowledge/documents": "workspace:^",
+    "@tiggyknowledge/document-metadata": "workspace:^",
+    "@tiggyknowledge/ingestion-tags": "workspace:^",
+    "@tiggyknowledge/note-creator": "workspace:^",
+    "@tiggyknowledge/okf": "workspace:^",
+    "@tiggyknowledge/okf-export": "workspace:^",
+    "@tiggyknowledge/plugin-inventory": "workspace:^",
+    "@tiggyknowledge/query": "workspace:^",
+    "@tiggyknowledge/preview-text": "workspace:^",
+    "@tiggyknowledge/semantic-capabilities": "workspace:^",
+    "@tiggyknowledge/settings-file": "workspace:^",
+    "@tiggyknowledge/storage-manager": "workspace:^"
+  }
+}

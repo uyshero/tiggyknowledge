@@ -1,0 +1,29 @@
+{
+  "name": "@tiggyknowledge/client-ui-layout",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    }
+  },
+  "dependencies": {
+    "lucide-react": "^0.468.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "workspace:^",
+    "@tiggyknowledge/client-runtime": "workspace:^"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "workspace:^",
+    "@tiggyknowledge/client-runtime": "workspace:^",
+    "@types/react": "~18.3.1",
+    "@types/react-dom": "~18.3.0"
+  }
+}

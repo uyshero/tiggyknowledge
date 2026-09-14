@@ -1,0 +1,28 @@
+{
+  "name": "@tiggyknowledge/dsh-connector",
+  "version": "0.0.1",
+  "private": false,
+  "type": "module",
+  "main": "lib/types/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": { ".": { "types": "./lib/types/index.d.ts", "default": "./lib/types/index.js" } },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-tools": "^0.1.0-rc.5"
+  },
+  "dependencies": {
+    "@deepseek-ai/schemastery": "^3.18.1"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/dsh-tools": "^0.1.0-rc.5",
+    "@types/node": "^22.20.0"
+  },
+  "files": [
+    "README.md",
+    "deepseek-harness.local.patch.yml",
+    "lib/types/**/*.d.ts",
+    "lib/types/**/*.js"
+  ],
+  "license": "MIT"
+}

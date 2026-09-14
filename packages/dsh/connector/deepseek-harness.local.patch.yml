@@ -1,0 +1,27 @@
+# Local DeepSeek Harness overlay for tiggyknowledge.
+#
+# Usage from the deepseek-harness repo:
+#   pnpm dsh --profile headless \
+#     --patch "../tiggyknowledge/packages/dsh/connector/deepseek-harness.local.patch.yml" \
+#     "先调用 knowledge_status 看看本地知识库"
+#
+# Generate the token in tiggyknowledge:
+#   设置 → 智能体集成 → 生成访问 Key
+#
+# Connector API:
+#   <endpoint>/api/tiggyknowledge/*
+#
+# Store the generated key in DSH credentials under TIGGYKNOWLEDGE_TOKEN.
+# If the DSH credentials UI is not available in this profile yet, exporting
+# TIGGYKNOWLEDGE_TOKEN before launching DSH remains a compatible fallback.
+
+- insert:
+    - id: tiggyknowledge-connector
+      name: '/Users/viito/Documents/deepseek harness/tiggyknowledge/packages/dsh/connector/src/index.ts'
+      config:
+        endpoint: 'http://127.0.0.1:3210'
+        tools:
+          search: true
+          read: true
+          okf: true
+          write: false

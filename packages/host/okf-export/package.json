@@ -1,0 +1,34 @@
+{
+  "name": "@tiggyknowledge/okf-export",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": { ".": { "types": "./lib/types/index.d.ts", "default": "./lib/index.js" } },
+  "dependencies": {
+    "fflate": "^0.8.2",
+    "js-yaml": "^4.1.0"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "workspace:^",
+    "@tiggyknowledge/catalog-sqlite": "workspace:^",
+    "@tiggyknowledge/content-local": "workspace:^",
+    "@tiggyknowledge/okf": "workspace:^"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "workspace:^",
+    "@tiggyknowledge/catalog-sqlite": "workspace:^",
+    "@tiggyknowledge/chunker-basic": "workspace:^",
+    "@tiggyknowledge/content-local": "workspace:^",
+    "@tiggyknowledge/contracts": "workspace:^",
+    "@tiggyknowledge/document-metadata": "workspace:^",
+    "@tiggyknowledge/index-fts": "workspace:^",
+    "@tiggyknowledge/ingestion": "workspace:^",
+    "@tiggyknowledge/metadata-sqlite": "workspace:^",
+    "@tiggyknowledge/okf": "workspace:^",
+    "@tiggyknowledge/preview-text": "workspace:^",
+    "@tiggyknowledge/producer-text": "workspace:^",
+    "@types/js-yaml": "^4.0.9"
+  }
+}

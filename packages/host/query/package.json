@@ -1,0 +1,25 @@
+{
+  "name": "@tiggyknowledge/query",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": { ".": { "types": "./lib/types/index.d.ts", "default": "./lib/index.js" } },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "workspace:^",
+    "@tiggyknowledge/catalog-sqlite": "workspace:^",
+    "@tiggyknowledge/document-metadata": "workspace:^",
+    "@tiggyknowledge/index-fts": "workspace:^",
+    "@tiggyknowledge/metadata-sqlite": "workspace:^",
+    "@tiggyknowledge/semantic-capabilities": "workspace:^"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "workspace:^",
+    "@tiggyknowledge/catalog-sqlite": "workspace:^",
+    "@tiggyknowledge/contracts": "workspace:^",
+    "@tiggyknowledge/document-metadata": "workspace:^",
+    "@tiggyknowledge/index-fts": "workspace:^",
+    "@tiggyknowledge/semantic-capabilities": "workspace:^"
+  }
+}

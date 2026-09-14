@@ -1,0 +1,51 @@
+{
+  "name": "@tiggyknowledge/cli",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "bin": {
+    "tiggyknowledge": "lib/index.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    }
+  },
+  "dependencies": {
+    "@deepseek-ai/cordis": "workspace:^",
+    "@deepseek-ai/cordis-plugin-include": "workspace:^",
+    "@deepseek-ai/cordis-plugin-loader": "workspace:^",
+    "@deepseek-ai/cordis-plugin-logger-console": "workspace:^",
+    "@tiggyknowledge/catalog-sqlite": "workspace:^",
+    "@tiggyknowledge/chunker-basic": "workspace:^",
+    "@tiggyknowledge/content-local": "workspace:^",
+    "@tiggyknowledge/metadata-sqlite": "workspace:^",
+    "@tiggyknowledge/documents": "workspace:^",
+    "@tiggyknowledge/document-metadata": "workspace:^",
+    "@tiggyknowledge/graph": "workspace:^",
+    "@tiggyknowledge/index-fts": "workspace:^",
+    "@tiggyknowledge/ingestion": "workspace:^",
+    "@tiggyknowledge/ingestion-tags": "workspace:^",
+    "@tiggyknowledge/note-creator": "workspace:^",
+    "@tiggyknowledge/okf": "workspace:^",
+    "@tiggyknowledge/okf-export": "workspace:^",
+    "@tiggyknowledge/producer-text": "workspace:^",
+    "@tiggyknowledge/producer-pdf": "workspace:^",
+    "@tiggyknowledge/preview-text": "workspace:^",
+    "@tiggyknowledge/preview-pdf": "workspace:^",
+    "@tiggyknowledge/query": "workspace:^",
+    "@tiggyknowledge/semantic-capabilities": "workspace:^",
+    "@tiggyknowledge/client-bootstrap": "workspace:^",
+    "@tiggyknowledge/plugin-inventory": "workspace:^",
+    "@tiggyknowledge/settings-file": "workspace:^",
+    "@tiggyknowledge/storage-manager": "workspace:^",
+    "@tiggyknowledge/webserver": "workspace:^",
+    "js-yaml": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9"
+  }
+}

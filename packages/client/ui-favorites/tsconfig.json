@@ -1,0 +1,12 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": { "rootDir": "src", "outDir": "lib/types", "jsx": "react-jsx", "lib": ["ES2024", "DOM"] },
+  "include": ["src"],
+  "references": [
+    { "path": "../../../vendor/cosmokit" },
+    { "path": "../../../vendor/cordis" },
+    { "path": "../../core/contracts" },
+    { "path": "../connection" },
+    { "path": "../runtime" }
+  ]
+}

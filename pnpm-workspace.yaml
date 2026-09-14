@@ -1,0 +1,22 @@
+packages:
+  - vendor/*
+  - packages/*/*
+  - apps/*
+
+linkWorkspacePackages: true
+
+overrides:
+  '@deepseek-ai/cosmokit': 'link:vendor/cosmokit'
+  '@deepseek-ai/schemastery': 'link:vendor/schemastery'
+
+peerDependencyRules:
+  allowedVersions:
+    typescript: '>=5 <7'
+
+allowBuilds:
+  esbuild: true
+  node-pty: true
+  node-addon-require-builtin: false
+
+minimumReleaseAgeExclude:
+  - react-pdf@10.5.0

@@ -1,0 +1,20 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib/types"
+  },
+  "include": ["src"],
+  "references": [
+    { "path": "../../vendor/cosmokit" },
+    { "path": "../../vendor/cordis" },
+    { "path": "../../vendor/loader" },
+    { "path": "../../vendor/include" },
+    { "path": "../../packages/storage/catalog-sqlite" },
+    { "path": "../../packages/settings/settings-file" },
+    { "path": "../../packages/host/semantic-capabilities" },
+    { "path": "../../packages/host/client-bootstrap" },
+    { "path": "../../packages/host/plugin-inventory" },
+    { "path": "../../packages/host/webserver" }
+  ]
+}

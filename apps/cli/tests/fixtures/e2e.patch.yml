@@ -1,0 +1,25 @@
+- id: knowledge-catalog
+  config:
+    dataDir: !!js process.env.TIGGYKNOWLEDGE_TEST_DATA_DIR
+
+- id: knowledge-content
+  config:
+    dataDir: !!js process.env.TIGGYKNOWLEDGE_TEST_DATA_DIR
+
+- id: knowledge-metadata-store
+  config:
+    dataDir: !!js process.env.TIGGYKNOWLEDGE_TEST_DATA_DIR
+
+- id: fts-index
+  config:
+    dataDir: !!js process.env.TIGGYKNOWLEDGE_TEST_DATA_DIR
+
+- id: settings
+  config:
+    path: !!js process.env.TIGGYKNOWLEDGE_TEST_DATA_DIR + '/settings.yaml'
+
+- id: webserver
+  config:
+    host: 127.0.0.1
+    port: !!js Number(process.env.TIGGYKNOWLEDGE_TEST_PORT)
+    distRoot: !!js ctx.projectRoot + '/apps/web/dist'
