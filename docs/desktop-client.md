@@ -18,6 +18,12 @@ The default Host port is `3210`. Set `TIGGYKNOWLEDGE_DESKTOP_PORT` to use a
 different stable port. Keep the port stable when using the DSH connector, whose
 default endpoint is `http://127.0.0.1:3210`.
 
+The desktop client enforces a single running instance. Launching it again brings
+the existing window to the foreground. On macOS, closing the window keeps the
+application available from the dock; selecting it again recreates the window
+without restarting the Host. The native menu provides new-window, reload,
+zoom, full-screen, and developer-tools commands.
+
 ## Data location
 
 Desktop runtime data is stored in Electron's per-user `userData` directory,

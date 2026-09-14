@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, shell } from 'electron'
+import { app, BrowserWindow, dialog, Menu, shell } from 'electron'
 import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
@@ -10,9 +10,23 @@ let host: Context | undefined
 let window: BrowserWindow | undefined
 let stopping = false
 
+const hasSingleInstanceLock = app.requestSingleInstanceLock()
+
+if (!hasSingleInstanceLock) {
+  app.quit()
+}
+
 function projectRoot(): string {
   if (app.isPackaged) return resolve(process.resourcesPath, 'project')
   return resolve(import.meta.dirname, '../../..')
+}
+
+function isSameOrigin(url: string, origin: string): boolean {
+  try {
+    return new URL(url).origin === origin
+  } catch {
+    return false
+  }
 }
 
 async function loadCli(): Promise<CliModule> {
@@ -22,6 +36,12 @@ async function loadCli(): Promise<CliModule> {
 
 async function createWindow(): Promise<void> {
   if (host === undefined) throw new Error('desktop: host is not running')
+
+  if (window !== undefined) {
+    if (window.isMinimized()) window.restore()
+    window.focus()
+    return
+  }
 
   window = new BrowserWindow({
     width: 1440,
@@ -44,10 +64,55 @@ async function createWindow(): Promise<void> {
     return { action: 'deny' }
   })
   window.webContents.on('will-navigate', (event, url) => {
-    if (!url.startsWith(localOrigin)) event.preventDefault()
+    if (!isSameOrigin(url, localOrigin)) event.preventDefault()
+  })
+  window.on('closed', () => {
+    window = undefined
   })
   await window.loadURL(host.webServer.url)
   window.once('ready-to-show', () => window?.show())
+}
+
+function installApplicationMenu(): void {
+  const template: Electron.MenuItemConstructorOptions[] = [
+    {
+      label: 'TiggyKnowledge',
+      submenu: [
+        { role: 'about' },
+        { type: 'separator' },
+        { role: 'services' },
+        { type: 'separator' },
+        { role: 'hide' },
+        { role: 'hideOthers' },
+        { role: 'unhide' },
+        { type: 'separator' },
+        { role: 'quit' },
+      ],
+    },
+    {
+      label: '文件',
+      submenu: [
+        { label: '新建窗口', accelerator: 'CmdOrCtrl+N', click: () => void createWindow().catch(handleStartupError) },
+        { type: 'separator' },
+        { role: 'close' },
+      ],
+    },
+    {
+      label: '视图',
+      submenu: [
+        { role: 'reload' },
+        { role: 'forceReload' },
+        { role: 'toggleDevTools' },
+        { type: 'separator' },
+        { role: 'resetZoom' },
+        { role: 'zoomIn' },
+        { role: 'zoomOut' },
+        { type: 'separator' },
+        { role: 'togglefullscreen' },
+      ],
+    },
+  ]
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template))
 }
 
 async function stopHost(): Promise<void> {
@@ -58,8 +123,14 @@ async function stopHost(): Promise<void> {
 }
 
 async function start(): Promise<void> {
+  if (!hasSingleInstanceLock) return
   await app.whenReady()
   app.setName('TiggyKnowledge')
+  installApplicationMenu()
+
+  app.on('second-instance', () => {
+    void createWindow().catch(handleStartupError)
+  })
 
   const root = projectRoot()
   const dataRoot = app.getPath('userData')
@@ -75,7 +146,12 @@ async function start(): Promise<void> {
     distRoot: resolve(root, 'apps/web/dist'),
     port: configuredPort,
   })
-  await createWindow()
+  try {
+    await createWindow()
+  } catch (error) {
+    await stopHost()
+    throw error
+  }
 }
 
 app.on('window-all-closed', () => {
@@ -83,7 +159,7 @@ app.on('window-all-closed', () => {
 })
 
 app.on('activate', () => {
-  if (window === undefined) void createWindow().catch(handleStartupError)
+  void createWindow().catch(handleStartupError)
 })
 
 app.on('before-quit', event => {
