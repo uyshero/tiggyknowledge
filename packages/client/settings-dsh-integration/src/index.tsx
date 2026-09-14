@@ -1,5 +1,5 @@
 import type { Context } from '@deepseek-ai/cordis'
-import { ArrowLeft, BookOpen, Clipboard, KeyRound, RefreshCw } from 'lucide-react'
+import { ArrowLeft, BookOpen, Clipboard, KeyRound, Link, RefreshCw } from 'lucide-react'
 import { useEffect, useMemo, useState, type JSX } from 'react'
 import type {} from '@tiggyknowledge/client-connection'
 import type { SettingsPanelProps } from '@tiggyknowledge/client-runtime'
@@ -32,13 +32,18 @@ function readDshSettings(value: unknown): DshIntegrationSettings {
   return settings
 }
 
+function currentServiceBaseUrl(): string {
+  return window.location.origin
+}
+
 export function apply(ctx: Context): void {
   function AgentIntegrationManualPage(): JSX.Element {
     const [copyingManual, setCopyingManual] = useState(false)
     const [manualMessage, setManualMessage] = useState<string>()
+    const serviceBaseUrl = currentServiceBaseUrl()
     const manualSummary = `TiggyKnowledge 对外接入手册
 
-Base URL: http://127.0.0.1:3210
+Base URL: ${serviceBaseUrl}
 Auth: Authorization: Bearer <access-key>
 
 首选接口:
@@ -112,12 +117,11 @@ Auth: Authorization: Bearer <access-key>
                 <div className="dsh-picker-heading">
                   <div><strong>1. Base URL 与认证</strong><span>本机默认地址加 Bearer Token。</span></div>
                 </div>
-                <pre className="dsh-config-preview"><code>{`Base URL 示例：
-http://127.0.0.1:3210
-https://knowledge.example.com
+                <pre className="dsh-config-preview"><code>{`当前 Base URL：
+${serviceBaseUrl}
 
 完整接口示例：
-http://127.0.0.1:3210/api/tiggyknowledge/search
+${serviceBaseUrl}/api/tiggyknowledge/search
 
 Header：
 Authorization: Bearer <access-key>
@@ -158,18 +162,18 @@ GET  /api/tiggyknowledge/documents/:id/okf?maxCharacters=20000`}</code></pre>
                   <div><strong>4. curl 示例</strong><span>外部智能体可以照这个请求拼接。</span></div>
                 </div>
                 <pre className="dsh-config-preview"><code>{`curl -H "Authorization: Bearer <access-key>" \\
-  http://127.0.0.1:3210/api/tiggyknowledge/status
+  ${serviceBaseUrl}/api/tiggyknowledge/status
 
 curl -H "Authorization: Bearer <access-key>" \\
-  http://127.0.0.1:3210/api/tiggyknowledge/libraries
+  ${serviceBaseUrl}/api/tiggyknowledge/libraries
 
-curl -X POST http://127.0.0.1:3210/api/tiggyknowledge/search \\
+curl -X POST ${serviceBaseUrl}/api/tiggyknowledge/search \\
   -H "Authorization: Bearer <access-key>" \\
   -H "Content-Type: application/json" \\
   -d '{"query":"向量化","knowledgeBaseIds":[],"topK":5,"favoriteOnly":false}'
 
 curl -H "Authorization: Bearer <access-key>" \\
-  "http://127.0.0.1:3210/api/tiggyknowledge/documents/<documentId>/read?maxCharacters=20000"`}</code></pre>
+  "${serviceBaseUrl}/api/tiggyknowledge/documents/<documentId>/read?maxCharacters=20000"`}</code></pre>
               </div>
               <div className="dsh-library-picker">
                 <div className="dsh-picker-heading">
@@ -236,6 +240,8 @@ curl -H "Authorization: Bearer <access-key>" \\
     const [generatedAccessKey, setGeneratedAccessKey] = useState<string>()
     const [message, setMessage] = useState<string>()
     const [saveError, setSaveError] = useState<string>()
+    const serviceBaseUrl = currentServiceBaseUrl()
+    const capabilitiesUrl = `${serviceBaseUrl}/api/capabilities`
 
     useEffect(() => {
       setSelectedLibraryIds(snapshotSettings.defaultKnowledgeBaseIds)
@@ -317,6 +323,17 @@ curl -H "Authorization: Bearer <access-key>" \\
       }
     }
 
+    const copyEndpoint = async (value: string, label: string): Promise<void> => {
+      setMessage(undefined)
+      setSaveError(undefined)
+      try {
+        await navigator.clipboard.writeText(value)
+        setMessage(`已复制${label}`)
+      } catch {
+        setSaveError(`无法访问剪贴板，请手动复制${label}`)
+      }
+    }
+
     return (
       <div className="settings-section dsh-integration-section">
         <div className="section-heading">
@@ -324,6 +341,25 @@ curl -H "Authorization: Bearer <access-key>" \\
         </div>
         {error !== undefined && <div className="error-banner">{error}</div>}
         {libraryError !== undefined && <div className="error-banner">{libraryError}</div>}
+        <div className="dsh-endpoint-panel">
+          <div className="dsh-endpoint-heading">
+            <div className="dsh-card-icon"><Link size={18} /></div>
+            <div><strong>当前接口地址</strong><span>外部 Connector 在本机配置时使用此 Base URL。</span></div>
+          </div>
+          <div className="dsh-endpoint-list">
+            <div className="dsh-endpoint-row">
+              <div><span>Base URL</span><code>{serviceBaseUrl}</code></div>
+              <button className="icon-button" type="button" aria-label="复制当前接口地址" title="复制当前接口地址" onClick={() => void copyEndpoint(serviceBaseUrl, '当前接口地址')}><Clipboard size={16} /></button>
+            </div>
+            <div className="dsh-endpoint-row">
+              <div><span>能力发现</span><code>{capabilitiesUrl}</code></div>
+              <button className="icon-button" type="button" aria-label="复制能力发现地址" title="复制能力发现地址" onClick={() => void copyEndpoint(capabilitiesUrl, '能力发现地址')}><Clipboard size={16} /></button>
+            </div>
+          </div>
+          {snapshotSettings.endpoint !== serviceBaseUrl && (
+            <div className="dsh-endpoint-note">Connector 保存的地址为 <code>{snapshotSettings.endpoint}</code>，与当前服务地址不同。</div>
+          )}
+        </div>
         <div className="dsh-access-key-panel">
           <div className="dsh-picker-heading">
             <div>
