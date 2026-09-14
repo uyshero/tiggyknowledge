@@ -4,6 +4,7 @@ DeepSeek Harness reference connector for tiggyknowledge. It registers read-only 
 
 First version tools:
 
+- `knowledge_capabilities`
 - `knowledge_status`
 - `knowledge_list_libraries`
 - `knowledge_search`
@@ -29,6 +30,11 @@ Generate the token in tiggyknowledge: Settings → Agent Integration → Generat
 Store the generated token in DSH credentials under `TIGGYKNOWLEDGE_TOKEN`.
 
 The connector resolves the token on every tool call. When DSH mounts its credentials service, the value can be managed from DSH's credential-aware settings surfaces and is stored outside ordinary plugin settings. If a local profile has no credentials service yet, exporting `TIGGYKNOWLEDGE_TOKEN` before launching DSH remains a fallback.
+
+`knowledge_capabilities` is intentionally public and does not require a token. Use it
+first when the endpoint may be remote or may expose optional search providers; it
+reports the protocol version, read-only operations, and enabled search modes. The
+remaining tools still require the configured Bearer access key.
 
 When DSH mounts its settings service, the connector also registers a `tiggyknowledge` settings namespace. This exposes `endpoint` and enabled read-only tools to DSH settings/configuration clients; the legacy literal `token` field is marked as a secret and should be left empty. The connector treats `endpoint` as the Base URL and appends the standard `/api/tiggyknowledge/*` paths. Knowledge-base scope is selected per prompt: omit `knowledgeBaseIds` to search all knowledge bases, or pass explicit ids from the composer picker.
 

@@ -138,12 +138,12 @@ async function resolveToken(ctx: Context, config: ConnectorConfig): Promise<stri
   )
 }
 
-async function request<T>(ctx: Context, config: ConnectorConfig, path: string, init: RequestInit = {}): Promise<T> {
-  const token = await resolveToken(ctx, config)
+async function request<T>(ctx: Context, config: ConnectorConfig, path: string, init: RequestInit = {}, authenticated = true): Promise<T> {
+  const token = authenticated ? await resolveToken(ctx, config) : undefined
   const response = await fetch(`${config.endpoint}${path}`, {
     ...init,
     headers: {
-      authorization: `Bearer ${token}`,
+      ...(token === undefined ? {} : { authorization: `Bearer ${token}` }),
       ...(init.body === undefined ? {} : { 'content-type': 'application/json' }),
       ...init.headers,
     },
@@ -165,6 +165,17 @@ export function apply(ctx: Context, config: Config): void {
       resolved = resolveConfig(next)
     }), 'tiggyknowledge connector: settings')
   }
+
+  ctx.tools.register(defineTool({
+    name: 'knowledge_capabilities',
+    description: 'Discover the tiggyknowledge API protocol and enabled read-only capabilities without requiring an access key.',
+    parameters: {},
+    output: {
+      schema: { type: 'object', additionalProperties: true },
+      render: (_args, value) => [{ type: 'text', text: JSON.stringify(value, null, 2) }],
+    },
+    execute: async (_args, exec) => await request(ctx, resolved, '/api/capabilities', { signal: exec.signal }, false),
+  }))
 
   ctx.tools.register(defineTool({
     name: 'knowledge_status',

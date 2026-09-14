@@ -60,6 +60,7 @@ DSH 不直接管理 tiggyknowledge 的数据库。它只安装一个可选 Conne
 - `knowledge_read`：读取某个文档的摘要/正文片段；
 - `knowledge_okf`：读取某个文档的 OKF 映射；
 - `knowledge_status`：检查 tiggyknowledge 是否启动、连接到哪个数据目录、启用了哪些能力。
+- `knowledge_capabilities`：在不提供 Token 时发现协议版本、只读操作和搜索模式。
 
 第一版不要提供写入工具。等权限、审计、确认框成熟后，再考虑：
 
