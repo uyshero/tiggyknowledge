@@ -15,6 +15,8 @@ await rm(projectRoot, { recursive: true, force: true })
 execFileSync(pnpmCommand, ['deploy', '--filter', '@tiggyknowledge/cli', '--prod', deployRoot, '--legacy', '--config.confirmModulesPurge=false'], {
   cwd: workspaceRoot,
   env: { ...process.env, CI: 'true' },
+  // Windows package-manager shims are .cmd files and require a shell to run.
+  shell: process.platform === 'win32',
   stdio: 'inherit',
 })
 const deployRealRoot = realpathSync(deployRoot)
