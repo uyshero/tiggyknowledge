@@ -9,7 +9,7 @@ const desktopRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const workspaceRoot = resolve(desktopRoot, '../..')
 const projectRoot = resolve(desktopRoot, '.packaged/project')
 const deployRoot = resolve(tmpdir(), `tiggyknowledge-deploy-${process.pid}-${Date.now()}`)
-const deployArgs = ['deploy', '--filter', '@tiggyknowledge/cli', '--prod', deployRoot, '--legacy', '--config.confirmModulesPurge=false']
+const deployArgs = ['--config.inject-workspace-packages=true', 'deploy', '--filter', '@tiggyknowledge/cli', '--prod', deployRoot]
 const deployOptions = {
   cwd: workspaceRoot,
   env: { ...process.env, CI: 'true' },
@@ -20,7 +20,7 @@ await rm(projectRoot, { recursive: true, force: true })
 if (process.platform === 'win32') {
   // .cmd shims require cmd.exe. Keep the command static and pass the generated
   // destination through the environment to avoid shell argument interpolation.
-  execSync('pnpm.cmd deploy --filter @tiggyknowledge/cli --prod "%TIGGYKNOWLEDGE_DEPLOY_ROOT%" --legacy --config.confirmModulesPurge=false', {
+  execSync('pnpm.cmd --config.inject-workspace-packages=true deploy --filter @tiggyknowledge/cli --prod "%TIGGYKNOWLEDGE_DEPLOY_ROOT%"', {
     ...deployOptions,
     env: { ...deployOptions.env, TIGGYKNOWLEDGE_DEPLOY_ROOT: deployRoot },
   })
