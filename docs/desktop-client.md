@@ -71,6 +71,9 @@ pnpm version:set 0.1.0
 pnpm version:check
 ```
 
+For the complete copy-ready release sequence, including checks, commit, tag,
+push, and post-release verification, see [RELEASE.md](../RELEASE.md).
+
 Commit the version change and push a matching tag to trigger the desktop
 release workflow:
 

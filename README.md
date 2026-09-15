@@ -30,6 +30,9 @@ pnpm desktop:dev
 See [desktop client](docs/desktop-client.md) for data location, port, DSH
 integration, and packaging details.
 
+To publish a new desktop version, follow the copy-ready commands in
+[RELEASE.md](RELEASE.md).
+
 ## Planning
 
 - [deepseek harness integration plan](docs/deepseek-harness-integration-plan.md)
