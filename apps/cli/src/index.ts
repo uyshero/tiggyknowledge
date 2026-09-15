@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { Context, FiberState } from '@deepseek-ai/cordis'
@@ -12,6 +13,7 @@ declare module '@deepseek-ai/cordis' {
     dataRoot: string
     webDistRoot: string
     webPort: number
+    appVersion: string
   }
 }
 
@@ -22,6 +24,14 @@ export interface BootOptions {
   dataRoot?: string
   distRoot?: string
   port?: number
+}
+
+function readProjectVersion(projectRoot: string): string {
+  const manifest = JSON.parse(readFileSync(resolve(projectRoot, 'package.json'), 'utf8')) as { version?: unknown }
+  if (typeof manifest.version !== 'string' || manifest.version.length === 0) {
+    throw new Error('tiggyknowledge: project package.json has no version')
+  }
+  return manifest.version
 }
 
 function formatError(error: unknown, indent = ''): string {
@@ -53,6 +63,7 @@ export async function boot(patchFiles: string[] = [], options: BootOptions = {})
   ctx.provide('dataRoot', dataRoot)
   ctx.provide('webDistRoot', distRoot)
   ctx.provide('webPort', port)
+  ctx.provide('appVersion', readProjectVersion(projectRoot))
   try {
     await ctx.plugin(Loader, { baseUrl })
     await ctx.loader.root.update(entries)

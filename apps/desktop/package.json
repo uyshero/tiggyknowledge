@@ -11,12 +11,17 @@
     "start": "electron .",
     "pack-resources": "node scripts/prepare.mjs",
     "package": "pnpm run pack-resources && electron-builder",
-    "package:win": "pnpm run pack-resources && electron-builder --win nsis --x64"
+    "package:mac": "pnpm run pack-resources && electron-builder --mac dmg zip --universal --publish never",
+    "package:win": "pnpm run pack-resources && electron-builder --win nsis --x64 --publish never"
+  },
+  "dependencies": {
+    "semver": "^7.8.5"
   },
   "devDependencies": {
     "@tiggyknowledge/cli": "workspace:^",
     "@tiggyknowledge/webserver": "workspace:^",
     "@types/node": "^22.20.0",
+    "@types/semver": "^7.8.0",
     "electron": "^38.1.0",
     "electron-builder": "25.1.8",
     "typescript": "^6.0.3"
@@ -37,15 +42,22 @@
         "to": "project"
       }
     ],
+    "publish": [{
+      "provider": "github",
+      "owner": "uyshero",
+      "repo": "tiggyknowledge"
+    }],
     "mac": {
       "category": "public.app-category.productivity",
-      "target": ["dmg"]
+      "target": ["dmg", "zip"],
+      "artifactName": "${productName}-${version}-mac-${arch}.${ext}"
     },
     "linux": {
       "target": ["AppImage"]
     },
     "win": {
-      "target": ["nsis"]
+      "target": ["nsis"],
+      "artifactName": "${productName}-Setup-${version}-win-${arch}.${ext}"
     }
   }
 }

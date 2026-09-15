@@ -12,11 +12,12 @@ describe('TiggyKnowledge capability discovery', () => {
         enabled: true,
         phase: 'active',
       }],
+      '0.2.3',
     )
 
     expect(snapshot).toEqual({
       product: 'tiggyknowledge',
-      version: '0.0.1',
+      version: '0.2.3',
       capabilities: {
         protocolVersion: 1,
         basePath: '/api/tiggyknowledge',
@@ -43,7 +44,7 @@ describe('TiggyKnowledge capability discovery', () => {
   })
 
   it('does not advertise write operations', () => {
-    const snapshot = createCapabilitiesSnapshot(['keyword'], [])
+    const snapshot = createCapabilitiesSnapshot(['keyword'], [], '0.2.3')
 
     expect(snapshot.capabilities.write).toBe(false)
     expect(snapshot.capabilities.operations.every(operation => operation.readOnly)).toBe(true)

@@ -1,14 +1,19 @@
-import { app, BrowserWindow, dialog, Menu, shell } from 'electron'
+import { app, BrowserWindow, dialog, Menu, net, shell } from 'electron'
 import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
 import type {} from '@tiggyknowledge/webserver'
+import { isNewerDesktopRelease, parseDesktopRelease } from './update.ts'
 
 type CliModule = typeof import('@tiggyknowledge/cli')
 
 let host: Context | undefined
 let window: BrowserWindow | undefined
 let stopping = false
+let updateCheck: Promise<void> | undefined
+let promptedVersion: string | undefined
+
+const LATEST_RELEASE_API = 'https://api.github.com/repos/uyshero/tiggyknowledge/releases/latest'
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock()
 
@@ -111,8 +116,68 @@ function installApplicationMenu(): void {
         { role: 'togglefullscreen' },
       ],
     },
+    {
+      label: '帮助',
+      submenu: [
+        { label: '检查更新...', click: () => void checkForUpdates(true) },
+        { type: 'separator' },
+        { label: '项目主页', click: () => void shell.openExternal('https://github.com/uyshero/tiggyknowledge') },
+      ],
+    },
   ]
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))
+}
+
+async function showMessage(options: Electron.MessageBoxOptions): Promise<Electron.MessageBoxReturnValue> {
+  return window === undefined ? await dialog.showMessageBox(options) : await dialog.showMessageBox(window, options)
+}
+
+async function runUpdateCheck(interactive: boolean): Promise<void> {
+  if (!app.isPackaged) {
+    if (interactive) await showMessage({ type: 'info', message: '开发模式不检查更新', detail: `当前版本：${app.getVersion()}` })
+    return
+  }
+
+  try {
+    const response = await net.fetch(LATEST_RELEASE_API, {
+      headers: {
+        accept: 'application/vnd.github+json',
+        'user-agent': `TiggyKnowledge/${app.getVersion()}`,
+      },
+      signal: AbortSignal.timeout(15_000),
+    })
+    if (!response.ok) throw new Error(`更新服务返回 HTTP ${response.status}`)
+    const release = parseDesktopRelease(await response.json())
+    if (!isNewerDesktopRelease(app.getVersion(), release)) {
+      if (interactive) await showMessage({ type: 'info', message: '已经是最新版本', detail: `当前版本：${app.getVersion()}` })
+      return
+    }
+    if (!interactive && promptedVersion === release.version) return
+    promptedVersion = release.version
+    const releaseNotes = release.releaseNotes.length > 0 ? release.releaseNotes.slice(0, 1_500) : '请前往下载页面查看更新内容。'
+    const result = await showMessage({
+      type: 'info',
+      title: 'TiggyKnowledge 更新',
+      message: `发现新版本 ${release.version}`,
+      detail: `当前版本：${app.getVersion()}\n\n${releaseNotes}`,
+      buttons: ['前往下载', '稍后'],
+      defaultId: 0,
+      cancelId: 1,
+    })
+    if (result.response === 0) await shell.openExternal(release.releaseUrl)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    console.error(`desktop update check failed: ${message}`)
+    if (interactive) await showMessage({ type: 'warning', message: '暂时无法检查更新', detail: message })
+  }
+}
+
+async function checkForUpdates(interactive: boolean): Promise<void> {
+  if (updateCheck !== undefined) return await updateCheck
+  updateCheck = runUpdateCheck(interactive).finally(() => {
+    updateCheck = undefined
+  })
+  return await updateCheck
 }
 
 async function stopHost(): Promise<void> {
@@ -148,6 +213,7 @@ async function start(): Promise<void> {
   })
   try {
     await createWindow()
+    setTimeout(() => void checkForUpdates(false), 5_000).unref()
   } catch (error) {
     await stopHost()
     throw error

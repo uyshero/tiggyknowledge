@@ -17,7 +17,10 @@
     "desktop:build": "pnpm run build && pnpm --filter @tiggyknowledge/desktop build",
     "desktop:dev": "pnpm run desktop:build && pnpm --filter @tiggyknowledge/desktop start",
     "desktop:dist": "pnpm run desktop:build && pnpm --filter @tiggyknowledge/desktop package",
+    "desktop:mac": "pnpm run desktop:build && pnpm --filter @tiggyknowledge/desktop package:mac",
     "desktop:win": "pnpm run desktop:build && pnpm --filter @tiggyknowledge/desktop package:win",
+    "version:check": "node scripts/version.mjs check",
+    "version:set": "node scripts/version.mjs set",
     "test": "vitest run",
     "typecheck": "tsc -b tsconfig.host.json tsconfig.client.json",
     "check": "pnpm run typecheck && pnpm run test && pnpm run build"

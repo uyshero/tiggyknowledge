@@ -50,7 +50,36 @@ build machine or CI runner. The first Windows build may be unsigned, so
 Windows SmartScreen can show an “unknown publisher” warning until a code-signing
 certificate is configured.
 
-The macOS DMG is emitted at `apps/desktop/dist/TiggyKnowledge-0.0.1.dmg`.
+The macOS DMG is emitted under `apps/desktop/dist/`, for example
+`TiggyKnowledge-0.0.1-mac-universal.dmg`.
 The local build has been verified by launching the packaged app and checking
 `GET /api/health`; it is currently unsigned and will show the usual macOS
 unidentified-developer warning until a Developer ID certificate is configured.
+
+## Releases and update checks
+
+The packaged desktop client checks the latest public GitHub Release shortly
+after startup. It only prompts when the release tag contains a newer stable
+semantic version. Users can also run **Help → Check for Updates**. This first
+stage opens the trusted GitHub Release page and does not install software in
+the background.
+
+Keep the root, CLI, and desktop versions synchronized with:
+
+```sh
+pnpm version:set 0.1.0
+pnpm version:check
+```
+
+Commit the version change and push a matching tag to trigger the desktop
+release workflow:
+
+```sh
+git tag -a v0.1.0 -m "v0.1.0"
+git push origin main --follow-tags
+```
+
+The workflow validates the version, runs tests, builds Windows and macOS
+artifacts, creates `SHA256SUMS.txt`, and uploads everything to the matching
+GitHub Release. Builds remain unsigned until platform signing credentials are
+configured.

@@ -52,6 +52,7 @@ import type {} from '@tiggyknowledge/storage-manager'
 declare module '@deepseek-ai/cordis' {
   interface Context {
     webServer: WebServer
+    appVersion: string
   }
 }
 
@@ -118,10 +119,11 @@ export function paginateContent(
 export function createCapabilitiesSnapshot(
   searchModes: KnowledgeCapabilities['searchModes'],
   hostPlugins: CapabilitiesSnapshot['hostPlugins'],
+  version: string,
 ): CapabilitiesSnapshot {
   return {
     product: 'tiggyknowledge',
-    version: '0.0.1',
+    version,
     capabilities: {
       protocolVersion: 1,
       basePath: '/api/tiggyknowledge',
@@ -227,6 +229,7 @@ export class WebServer extends Service {
       this.json(response, createCapabilitiesSnapshot(
         this.ctx.knowledgeSemanticCapabilities.snapshot().enabledModes,
         this.ctx.pluginInventory.list(),
+        this.ctx.appVersion,
       ))
       return
     }
@@ -234,7 +237,7 @@ export class WebServer extends Service {
       if (method !== 'GET') return this.methodNotAllowed(response, ['GET'])
       const snapshot: SystemSnapshot = {
         product: 'tiggyknowledge',
-        version: '0.0.1',
+        version: this.ctx.appVersion,
         catalog: this.ctx.knowledgeCatalog.summary(),
         settings: this.ctx.settings.snapshot(),
         semanticSearch: this.ctx.knowledgeSemanticCapabilities.snapshot(),
@@ -281,7 +284,7 @@ export class WebServer extends Service {
       const scopedLibraries = this.scopedTiggyKnowledgeLibraries()
       const status: DshKnowledgeStatus = {
         product: 'tiggyknowledge',
-        version: '0.0.1',
+        version: this.ctx.appVersion,
         dataDirectory: catalog.dataDirectory,
         libraries: scopedLibraries.length,
         documents: scopedLibraries.reduce((total, library) => total + library.documentCount, 0),
