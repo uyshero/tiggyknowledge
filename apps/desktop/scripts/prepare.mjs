@@ -9,7 +9,15 @@ const desktopRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const workspaceRoot = resolve(desktopRoot, '../..')
 const projectRoot = resolve(desktopRoot, '.packaged/project')
 const deployRoot = resolve(tmpdir(), `tiggyknowledge-deploy-${process.pid}-${Date.now()}`)
-const deployArgs = ['--config.inject-workspace-packages=true', 'deploy', '--filter', '@tiggyknowledge/cli', '--prod', deployRoot]
+const deployArgs = [
+  '--config.inject-workspace-packages=true',
+  '--config.node-linker=hoisted',
+  'deploy',
+  '--filter',
+  '@tiggyknowledge/cli',
+  '--prod',
+  deployRoot,
+]
 const deployOptions = {
   cwd: workspaceRoot,
   env: { ...process.env, CI: 'true' },
@@ -20,7 +28,7 @@ await rm(projectRoot, { recursive: true, force: true })
 if (process.platform === 'win32') {
   // .cmd shims require cmd.exe. Keep the command static and pass the generated
   // destination through the environment to avoid shell argument interpolation.
-  execSync('pnpm.cmd --config.inject-workspace-packages=true deploy --filter @tiggyknowledge/cli --prod "%TIGGYKNOWLEDGE_DEPLOY_ROOT%"', {
+  execSync('pnpm.cmd --config.inject-workspace-packages=true --config.node-linker=hoisted deploy --filter @tiggyknowledge/cli --prod "%TIGGYKNOWLEDGE_DEPLOY_ROOT%"', {
     ...deployOptions,
     env: { ...deployOptions.env, TIGGYKNOWLEDGE_DEPLOY_ROOT: deployRoot },
   })
@@ -49,10 +57,13 @@ for (const [source, destination] of [
   ['vendor/cosmokit', 'node_modules/@deepseek-ai/cosmokit'],
   ['vendor/schemastery', 'node_modules/@deepseek-ai/schemastery'],
 ]) {
-  await cp(resolve(workspaceRoot, source), resolve(projectRoot, destination), {
-    recursive: true,
-    dereference: true,
-  })
+  const sourceRoot = resolve(workspaceRoot, source)
+  const destinationRoot = resolve(projectRoot, destination)
+  await mkdir(destinationRoot, { recursive: true })
+  for (const name of ['package.json', 'LICENSE', 'README.md']) {
+    await cp(resolve(sourceRoot, name), resolve(destinationRoot, name))
+  }
+  await cp(resolve(sourceRoot, 'lib'), resolve(destinationRoot, 'lib'), { recursive: true })
 }
 
 await rm(deployRoot, { recursive: true, force: true })

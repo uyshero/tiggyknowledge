@@ -26,6 +26,15 @@ function projectRoot(): string {
   return resolve(import.meta.dirname, '../../..')
 }
 
+function formatError(error: unknown, indent = ''): string {
+  if (error instanceof AggregateError) {
+    return [error.message, ...error.errors.map(item => formatError(item, `${indent}  `))]
+      .map((line, index) => index === 0 ? `${indent}${line}` : line)
+      .join('\n')
+  }
+  return `${indent}${error instanceof Error ? error.message : String(error)}`
+}
+
 function isSameOrigin(url: string, origin: string): boolean {
   try {
     return new URL(url).origin === origin
@@ -236,7 +245,7 @@ app.on('before-quit', event => {
 })
 
 function handleStartupError(error: unknown): void {
-  const message = error instanceof Error ? error.message : String(error)
+  const message = formatError(error)
   console.error(error)
   dialog.showErrorBox('TiggyKnowledge 启动失败', message)
   app.quit()
