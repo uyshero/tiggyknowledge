@@ -57,7 +57,8 @@
     },
     "win": {
       "target": ["nsis"],
-      "artifactName": "${productName}-Setup-${version}-win-${arch}.${ext}"
+      "artifactName": "${productName}-Setup-${version}-win-${arch}.${ext}",
+      "signAndEditExecutable": false
     }
   }
 }
