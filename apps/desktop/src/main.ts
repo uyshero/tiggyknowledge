@@ -62,6 +62,7 @@ async function createWindow(): Promise<void> {
     height: 920,
     minWidth: 960,
     minHeight: 640,
+    icon: resolve(import.meta.dirname, '../build/icon.png'),
     show: false,
     title: 'TiggyKnowledge',
     backgroundColor: '#ffffff',

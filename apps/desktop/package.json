@@ -34,6 +34,7 @@
     },
     "files": [
       "lib/**/*",
+      "build/icon.png",
       "package.json"
     ],
     "extraResources": [
@@ -51,6 +52,7 @@
     ],
     "mac": {
       "category": "public.app-category.productivity",
+      "x64ArchFiles": "Contents/Resources/project/node_modules/**/*.node",
       "target": [
         "dmg",
         "zip"
@@ -67,7 +69,12 @@
         "nsis"
       ],
       "artifactName": "${productName}-Setup-${version}-win-${arch}.${ext}",
+      "icon": "build/icon.ico",
       "signAndEditExecutable": false
+    },
+    "nsis": {
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico"
     }
   }
 }
