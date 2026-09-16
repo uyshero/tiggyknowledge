@@ -166,7 +166,7 @@ describe('LLM Wiki generation', () => {
         completedSteps: 3,
         inputTokens: 36,
         outputTokens: 4_030,
-        candidateCount: 3,
+        candidateCount: 2,
         acceptedCandidateCount: 1,
       })
       expect(ctx.llmWiki.pages()).toEqual(expect.arrayContaining([
@@ -203,6 +203,156 @@ describe('LLM Wiki generation', () => {
       await vi.waitFor(() => expect(ctx.llmWiki.generation(incremental.id).state).toBe('completed'))
       expect(ctx.llmWiki.generation(incremental.id).totalSteps).toBe(0)
       expect(complete).toHaveBeenCalledTimes(4)
+    } finally {
+      await ctx.fiber.dispose()
+      rmSync(dataDir, { recursive: true, force: true })
+    }
+  })
+
+  it('preserves unrelated pages during incremental updates', async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), 'tiggyknowledge-llm-wiki-incremental-'))
+    const ctx = new Context()
+    let omitBetaCandidate = false
+    const complete = vi.fn(async input => {
+      const system = input.messages[0]?.content ?? ''
+      const user = input.messages.at(-1)?.content ?? ''
+      if (system.includes('知识库编辑')) {
+        return { content: `摘要-${user.slice(0, 80)}`, inputTokens: 10, outputTokens: 5 }
+      }
+      const payload = JSON.parse(user) as {
+        documents: Array<{ documentId: string, title: string, contentHash: string }>
+        acceptedCandidates?: Array<{
+          title: string
+          slug: string
+          pageType: string
+          aliases: string[]
+          purpose: string
+          questions: string[]
+          folderPath: string[]
+          sourceDocumentIds: string[]
+        }>
+      }
+      if (system.includes('词条规划器')) {
+        return {
+          content: JSON.stringify({
+            candidates: payload.documents.filter(document => !(omitBetaCandidate && document.title === 'Beta')).map(document => ({
+              title: document.title,
+              slug: `entity/${document.title.toLowerCase()}`,
+              pageType: 'entity',
+              aliases: [],
+              purpose: `持续维护${document.title}的独立事实和变化。`,
+              questions: [`${document.title}目前有哪些核心事实？`],
+              folderPath: ['实体'],
+              sourceDocumentIds: [document.documentId],
+              factCount: 3,
+              referencePotential: 2,
+              stableIdentity: true,
+              transient: false,
+              estimatedCharacters: 300,
+              reasons: ['稳定且可复用'],
+            })),
+          }),
+          inputTokens: 10,
+          outputTokens: 10,
+        }
+      }
+      const documentById = new Map(payload.documents.map(document => [document.documentId, document]))
+      return {
+        content: JSON.stringify({
+          pages: (payload.acceptedCandidates ?? []).map(candidate => ({
+            ...candidate,
+            summary: `${candidate.title}摘要`,
+            parentSlug: null,
+            sections: [{
+              title: '核心内容',
+              body: `内容版本-${documentById.get(candidate.sourceDocumentIds[0] ?? '')?.contentHash}`,
+              sourceDocumentIds: candidate.sourceDocumentIds,
+            }],
+          })),
+        }),
+        inputTokens: 10,
+        outputTokens: 10,
+      }
+    })
+    delete process.env.TIGGYKNOWLEDGE_LLM_API_KEY
+    ctx.provide('secretCodec', {
+      encrypt: value => Buffer.from(value).toString('base64'),
+      decrypt: value => Buffer.from(value, 'base64').toString(),
+    })
+    try {
+      await ctx.plugin(CatalogSqlite, { dataDir })
+      await ctx.plugin(ContentLocal, { dataDir })
+      await ctx.plugin(TextPreview)
+      await ctx.plugin(FileSettings, { path: join(dataDir, 'settings.yaml') })
+      await ctx.plugin(LlmCredentials, { dataDir })
+      await ctx.plugin(WikiSqlite, { dataDir })
+      ctx.provide('llmClient', { complete })
+      await ctx.plugin(LlmWiki)
+      ctx.settings.updateLlmIntegration({ enabled: true, model: 'test-model' })
+      ctx.llmCredentials.setApiKey('sk-test-wiki-key')
+      const library = ctx.knowledgeCatalog.createLibrary({ name: '增量测试库' })
+      const createDocument = (title: string, content: string) => {
+        const asset = ctx.knowledgeContent.save(new TextEncoder().encode(content))
+        ctx.knowledgeCatalog.registerAsset(asset)
+        return ctx.knowledgeCatalog.createDocument({
+          libraryId: library.id,
+          title,
+          originalName: `${title}.md`,
+          sourceType: 'markdown',
+          sourceAssetId: asset.id,
+          contentHash: asset.contentHash,
+          sizeBytes: asset.sizeBytes,
+        })
+      }
+      const documentA = createDocument('Alpha', 'Alpha 初始内容')
+      createDocument('Beta', 'Beta 不相关内容')
+      const initial = ctx.llmWiki.start({ mode: 'initial' })
+      await vi.waitFor(() => expect(ctx.llmWiki.generation(initial.id).state).toBe('completed'))
+      const betaBefore = ctx.llmWiki.page('entity/beta')
+      const alphaBefore = ctx.llmWiki.page('entity/alpha')
+
+      const replacement = ctx.knowledgeContent.save(new TextEncoder().encode('Alpha 更新内容'))
+      ctx.knowledgeCatalog.registerAsset(replacement)
+      ctx.knowledgeCatalog.updateDocument(documentA.id, {
+        sourceAssetId: replacement.id,
+        contentHash: replacement.contentHash,
+        sizeBytes: replacement.sizeBytes,
+      })
+      const incremental = ctx.llmWiki.start({ mode: 'incremental' })
+      await vi.waitFor(() => expect(ctx.llmWiki.generation(incremental.id).state).toBe('completed'))
+      const betaAfter = ctx.llmWiki.page('entity/beta')
+      const alphaAfter = ctx.llmWiki.page('entity/alpha')
+      expect(betaAfter).toMatchObject({
+        version: betaBefore.version,
+        updatedAt: betaBefore.updatedAt,
+        sections: [{ body: betaBefore.sections[0]?.body }],
+      })
+      expect(alphaAfter.version).toBeGreaterThan(alphaBefore.version)
+      expect(alphaAfter.sections[0]?.body).toContain(replacement.contentHash)
+      const planningCalls = complete.mock.calls.filter(([call]) => call.messages[0]?.content.includes('词条规划器'))
+      const incrementalPlanning = JSON.parse(planningCalls.at(-1)?.[0].messages.at(-1)?.content ?? '{}') as { documents: unknown[] }
+      expect(incrementalPlanning.documents).toHaveLength(1)
+
+      omitBetaCandidate = true
+      const rebuild = ctx.llmWiki.start({ mode: 'rebuild' })
+      await vi.waitFor(() => expect(ctx.llmWiki.generation(rebuild.id).state).toBe('completed'))
+      expect(ctx.llmWiki.pages().some(page => page.slug === 'entity/beta')).toBe(true)
+      expect(ctx.llmWiki.page('entity/beta')).toMatchObject({
+        version: betaBefore.version,
+        updatedAt: betaBefore.updatedAt,
+      })
+
+      const callsBeforeDeletion = complete.mock.calls.length
+      ctx.knowledgeCatalog.deleteDocuments([documentA.id])
+      const deletion = ctx.llmWiki.start({ mode: 'incremental' })
+      await vi.waitFor(() => expect(ctx.llmWiki.generation(deletion.id).state).toBe('completed'))
+      expect(ctx.llmWiki.pages().some(page => page.slug === 'entity/alpha')).toBe(false)
+      expect(ctx.llmWiki.page('entity/alpha').status).toBe('archived')
+      expect(ctx.llmWiki.page('entity/beta')).toMatchObject({
+        version: betaBefore.version,
+        updatedAt: betaBefore.updatedAt,
+      })
+      expect(complete).toHaveBeenCalledTimes(callsBeforeDeletion)
     } finally {
       await ctx.fiber.dispose()
       rmSync(dataDir, { recursive: true, force: true })

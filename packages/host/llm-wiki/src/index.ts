@@ -326,9 +326,7 @@ export class LlmWiki extends Service {
       for (const document of documents) {
         this.throwIfCancelled(id, controller.signal)
         generation = this.ctx.wikiStorage.updateGeneration(id, { phase: `summarizing:${document.id}` })
-        const cached = generation.mode !== 'rebuild'
-          ? this.ctx.wikiStorage.cachedSummary(document.id, document.contentHash)
-          : undefined
+        const cached = this.ctx.wikiStorage.cachedSummary(document.id, document.contentHash)
         if (cached === undefined) {
           const preview = await this.ctx.knowledgePreview.preview(document.id)
           const result = await this.ctx.llmClient.complete({
@@ -366,56 +364,26 @@ export class LlmWiki extends Service {
         contentHash: item.contentHash,
         summary: item.summary ?? '',
       }))
+      const planningDocuments = generation.mode === 'incremental'
+        ? [...changes.added, ...changes.updated]
+        : changes.current
+      const planningDocumentIds = new Set(planningDocuments.map(document => document.id))
+      const planningDocumentInput = documentInput.filter(document => planningDocumentIds.has(document.documentId))
       generation = this.ctx.wikiStorage.updateGeneration(id, { phase: 'planning' })
-      const planningInput = truncateForModel(JSON.stringify({
-        documents: documentInput,
-        existingPages: this.ctx.wikiStorage.listPages().map(page => ({
-          title: page.title,
-          slug: page.slug,
-          pageType: page.pageType,
-          aliases: page.aliases,
-        })),
-      }), settings.maxInputTokens)
-      let planning = await this.ctx.llmClient.complete({
-        settings: {
-          ...settings,
-          requestTimeoutMs: Math.max(settings.requestTimeoutMs, 180_000),
-        },
-        signal: controller.signal,
-        temperature: 0,
-        json: true,
-        maxAttempts: 3,
-        messages: [
-          {
-            role: 'system',
-            content: [
-              '你是 Wiki 词条规划器，只提出值得独立成页的知识对象，不生成正文。',
-              '只输出 JSON：{"candidates":[{"title":"...","slug":"entity/example","pageType":"entity","aliases":[],"purpose":"它在工作或个人知识管理中的具体用途","questions":["这个词条应回答的问题"],"folderPath":["领域"],"sourceDocumentIds":["真实文档ID"],"factCount":4,"referencePotential":2,"stableIdentity":true,"transient":false,"estimatedCharacters":500,"reasons":["可独立解释","会被复用"]}]}。',
-              'pageType 只能是 entity、concept、glossary、project、policy、procedure、decision、topic、synthesis、comparison。',
-              '同一对象的简称、旧称、英文名必须放入 aliases，不得拆成多个候选；相同对象应复用已有页面的 slug。',
-              'factCount 是可独立验证的事实数量；referencePotential 为 0 到 2，表示其他页面引用价值。',
-              'stableIdentity 仅用于名称和边界长期稳定的对象；transient 标记临时通知、一次性事件或短期状态。',
-              'estimatedCharacters 是基于证据可写出的正文字符数。普通名词、单条事实、文档标题和章节标题不得成为候选。',
-              'purpose 必须说明该页如何帮助定位、理解、决策或执行；questions 提供 1 到 5 个用户未来会主动询问的问题。无法给出明确用途和问题时不要建页。',
-              'entity 表示稳定对象；glossary/concept 统一语言；project 跟踪长期工作对象；policy 表示规则约束；procedure 指导执行；decision 保存重要结论；topic/synthesis/comparison 用于跨文档整合。',
-              'sourceDocumentIds 必须来自输入；宁缺毋滥，候选数量应与知识规模相称。',
-            ].join('\n'),
-          },
-          {
-            role: 'user',
-            content: planningInput,
-          },
-        ],
-      })
-      generation = this.addUsage(generation, planning)
-      this.throwIfCancelled(id, controller.signal)
-      let candidates: EntryCandidate[]
-      try {
-        candidates = parseCandidates(planning.content, changes.current)
-      } catch (error) {
-        if (!(error instanceof Error) || !error.message.includes('JSON')) throw error
-        generation = this.ctx.wikiStorage.updateGeneration(id, { phase: 'planning:compact-retry' })
-        planning = await this.ctx.llmClient.complete({
+      let candidates: EntryCandidate[] = []
+      for (const documentBatch of chunks(planningDocumentInput, 3)) {
+        const batchDocumentIds = new Set(documentBatch.map(document => document.documentId))
+        const batchDocuments = planningDocuments.filter(document => batchDocumentIds.has(document.id))
+        const planningInput = truncateForModel(JSON.stringify({
+          documents: documentBatch,
+          existingPages: this.ctx.wikiStorage.listPages().map(page => ({
+            title: page.title,
+            slug: page.slug,
+            pageType: page.pageType,
+            aliases: page.aliases,
+          })),
+        }), settings.maxInputTokens)
+        let planning = await this.ctx.llmClient.complete({
           settings: {
             ...settings,
             requestTimeoutMs: Math.max(settings.requestTimeoutMs, 180_000),
@@ -423,15 +391,21 @@ export class LlmWiki extends Service {
           signal: controller.signal,
           temperature: 0,
           json: true,
-          maxAttempts: 2,
+          maxAttempts: 3,
           messages: [
             {
               role: 'system',
               content: [
-                '上一次词条规划 JSON 被截断。请返回紧凑且完整的 {"candidates":[...]}，不要代码围栏或解释。',
-                '只保留 3 到 12 个最有独立成页价值的候选。',
-                '候选字段：title、slug、pageType、aliases、purpose、questions、folderPath、sourceDocumentIds、factCount、referencePotential、stableIdentity、transient、estimatedCharacters、reasons。',
-                '同义名称必须合并，来源 ID 必须来自输入。',
+                '你是 Wiki 词条规划器，只提出值得独立成页的知识对象，不生成正文。',
+                '只输出 JSON：{"candidates":[{"title":"...","slug":"entity/example","pageType":"entity","aliases":[],"purpose":"它在工作或个人知识管理中的具体用途","questions":["这个词条应回答的问题"],"folderPath":["领域"],"sourceDocumentIds":["真实文档ID"],"factCount":4,"referencePotential":2,"stableIdentity":true,"transient":false,"estimatedCharacters":500,"reasons":["可独立解释","会被复用"]}]}。',
+                'pageType 只能是 entity、concept、glossary、project、policy、procedure、decision、topic、synthesis、comparison。',
+                '同一对象的简称、旧称、英文名必须放入 aliases，不得拆成多个候选；相同对象应复用已有页面的 slug。',
+                'factCount 是可独立验证的事实数量；referencePotential 为 0 到 2，表示其他页面引用价值。',
+                'stableIdentity 仅用于名称和边界长期稳定的对象；transient 标记临时通知、一次性事件或短期状态。',
+                'estimatedCharacters 是基于证据可写出的正文字符数。普通名词、单条事实、文档标题和章节标题不得成为候选。',
+                'purpose 必须说明该页如何帮助定位、理解、决策或执行；questions 提供 1 到 5 个用户未来会主动询问的问题。无法给出明确用途和问题时不要建页。',
+                'entity 表示稳定对象；glossary/concept 统一语言；project 跟踪长期工作对象；policy 表示规则约束；procedure 指导执行；decision 保存重要结论；topic/synthesis/comparison 用于跨文档整合。',
+                'sourceDocumentIds 必须来自输入；宁缺毋滥，候选数量应与知识规模相称。',
               ].join('\n'),
             },
             { role: 'user', content: planningInput },
@@ -439,20 +413,109 @@ export class LlmWiki extends Service {
         })
         generation = this.addUsage(generation, planning)
         this.throwIfCancelled(id, controller.signal)
-        candidates = parseCandidates(planning.content, changes.current)
+        try {
+          candidates.push(...parseCandidates(planning.content, batchDocuments))
+        } catch (error) {
+          if (!(error instanceof Error) || !error.message.includes('JSON')) throw error
+          generation = this.ctx.wikiStorage.updateGeneration(id, { phase: 'planning:compact-retry' })
+          planning = await this.ctx.llmClient.complete({
+            settings: {
+              ...settings,
+              requestTimeoutMs: Math.max(settings.requestTimeoutMs, 180_000),
+            },
+            signal: controller.signal,
+            temperature: 0,
+            json: true,
+            maxAttempts: 2,
+            messages: [
+              {
+                role: 'system',
+                content: [
+                  '上一次词条规划 JSON 被截断。请返回紧凑且完整的 {"candidates":[...]}，不要代码围栏或解释。',
+                  '保留当前输入中最有独立成页价值的候选，不得遗漏不同主题。',
+                  '候选字段：title、slug、pageType、aliases、purpose、questions、folderPath、sourceDocumentIds、factCount、referencePotential、stableIdentity、transient、estimatedCharacters、reasons。',
+                  '同义名称必须合并，来源 ID 必须来自输入。',
+                ].join('\n'),
+              },
+              { role: 'user', content: planningInput },
+            ],
+          })
+          generation = this.addUsage(generation, planning)
+          this.throwIfCancelled(id, controller.signal)
+          candidates.push(...parseCandidates(planning.content, batchDocuments))
+        }
       }
-      const acceptedCandidates = mergeCandidates(candidates).filter(candidateAccepted)
-      if (acceptedCandidates.length === 0) throw new Error('词条规划未发现达到独立成页标准的候选')
+      const storedPages = generation.mode === 'rebuild' ? this.rebuildBaselinePages() : this.storedPages()
+      const currentDocumentIds = new Set(changes.current.map(document => document.id))
+      const changedExistingDocumentIds = [
+        ...changes.updated.map(document => document.id),
+        ...changes.deleted.map(document => document.documentId),
+      ]
+      const directlyImpactedSlugs = new Set(
+        generation.mode === 'rebuild'
+          ? storedPages.filter(page => page.pageType !== 'index' && page.state !== 'locked').map(page => page.slug)
+          : generation.mode === 'incremental'
+          ? changedExistingDocumentIds.flatMap(documentId =>
+            this.ctx.wikiStorage.pagesForDocument(documentId)
+              .filter(page => page.pageType !== 'index' && page.state !== 'locked')
+              .map(page => page.slug))
+          : [],
+      )
+      const folderPaths = new Map(this.ctx.wikiStorage.listFolders()
+        .map(folder => [folder.id, folder.path.split('/').filter(Boolean)]))
+      const forcedCandidates = storedPages
+        .filter(page => directlyImpactedSlugs.has(page.slug))
+        .flatMap(page => {
+          const sourceDocumentIds = page.sections.flatMap(section => section.sources.map(source => source.documentId))
+            .filter(documentId => currentDocumentIds.has(documentId))
+          return sourceDocumentIds.length === 0
+            ? []
+            : [candidateFromStoredPage(page, sourceDocumentIds, page.folderId === undefined ? [] : folderPaths.get(page.folderId) ?? [])]
+        })
+      const orphanedSlugs = new Set([...directlyImpactedSlugs].filter(slug =>
+        !forcedCandidates.some(candidate => candidate.slug === slug)))
+      const forcedSlugs = new Set(forcedCandidates.map(candidate => candidate.slug))
+      let acceptedCandidates = mergeCandidates([
+        ...forcedCandidates,
+        ...mergeCandidates(candidates).filter(candidateAccepted),
+      ]).filter(candidate => candidateAccepted(candidate) || forcedSlugs.has(candidate.slug))
+      if (generation.mode === 'incremental') {
+        acceptedCandidates = acceptedCandidates.flatMap(candidate => {
+          const existing = storedPages.find(page => page.slug === candidate.slug
+            || (compatiblePageTypes(page.pageType ?? 'concept', candidate.pageType)
+              && identitiesOverlap(page.title, page.aliases ?? [], candidate.title, candidate.aliases)))
+          if (existing?.state === 'locked') return []
+          if (existing === undefined || existing.pageType === 'index') return [candidate]
+          const existingSources = existing.sections.flatMap(section => section.sources.map(source => source.documentId))
+            .filter(documentId => currentDocumentIds.has(documentId))
+          return [{
+            ...candidate,
+            slug: existing.slug,
+            title: existing.title,
+            pageType: existing.pageType ?? candidate.pageType,
+            aliases: [...new Set([...(existing.aliases ?? []), ...candidate.aliases])],
+            purpose: existing.purpose ?? candidate.purpose,
+            questions: existing.questions ?? candidate.questions,
+            folderPath: existing.folderId === undefined ? candidate.folderPath : folderPaths.get(existing.folderId) ?? candidate.folderPath,
+            sourceDocumentIds: [...new Set([...existingSources, ...candidate.sourceDocumentIds])],
+          }]
+        })
+      }
+      if (acceptedCandidates.length === 0 && generation.mode !== 'incremental') {
+        throw new Error('词条规划未发现达到独立成页标准的候选')
+      }
       generation = this.ctx.wikiStorage.updateGeneration(id, {
-        candidateCount: candidates.length,
+        candidateCount: mergeCandidates([...forcedCandidates, ...candidates]).length,
         acceptedCandidateCount: acceptedCandidates.length,
         completedSteps: generation.completedSteps + 1,
         phase: 'synthesizing',
       })
-      const acceptedSourceIds = new Set(acceptedCandidates.flatMap(candidate => candidate.sourceDocumentIds))
+      let parsedPages: PlannedPage[] = []
+      for (const candidateBatch of chunks(acceptedCandidates, 3)) {
+        const acceptedSourceIds = new Set(candidateBatch.flatMap(candidate => candidate.sourceDocumentIds))
       const synthesisInput = truncateForModel(JSON.stringify({
         documents: documentInput.filter(document => acceptedSourceIds.has(document.documentId)),
-        acceptedCandidates,
+        acceptedCandidates: candidateBatch,
       }), settings.maxInputTokens)
       let synthesis = await this.ctx.llmClient.complete({
         settings: {
@@ -484,9 +547,9 @@ export class LlmWiki extends Service {
       })
       generation = this.addUsage(generation, synthesis)
       this.throwIfCancelled(id, controller.signal)
-      let parsedPages: PlannedPage[]
+      let generatedBatch: PlannedPage[]
       try {
-        parsedPages = this.parsePages(synthesis.content, changes.current)
+        generatedBatch = this.parsePages(synthesis.content, changes.current)
       } catch (error) {
         if (!(error instanceof Error) || !error.message.includes('JSON')) throw error
         generation = this.ctx.wikiStorage.updateGeneration(id, { phase: 'synthesizing:compact-retry' })
@@ -505,7 +568,7 @@ export class LlmWiki extends Service {
               content: [
                 '上一次 Wiki JSON 因输出过长而截断。请重新生成更紧凑且完整的 JSON，不要续写残片。',
                 '只返回 {"pages":[...]}，不要 Markdown 代码围栏和思考过程。',
-                '生成 3 到 6 个跨文档主题页；每页 1 到 3 个章节，每个章节正文不超过 400 个中文字符。',
+                '必须覆盖输入中的全部 acceptedCandidates；每页 1 到 3 个章节，每个章节正文不超过 400 个中文字符。',
                 '页面字段：title、slug、summary、pageType、aliases、purpose、questions、folderPath、parentSlug、sections。',
                 '章节字段：title、body、sourceDocumentIds；来源 ID 必须来自输入。不要生成 index 页面。',
               ].join('\n'),
@@ -515,17 +578,33 @@ export class LlmWiki extends Service {
         })
         generation = this.addUsage(generation, synthesis)
         this.throwIfCancelled(id, controller.signal)
-        parsedPages = this.parsePages(synthesis.content, changes.current)
+        generatedBatch = this.parsePages(synthesis.content, changes.current)
       }
-      parsedPages = restrictToCandidates(parsedPages, acceptedCandidates)
-      if (parsedPages.length === 0) throw new Error('LLM 未生成任何已通过规划的 Wiki 页面')
+      generatedBatch = restrictToCandidates(generatedBatch, candidateBatch)
+      if (generatedBatch.length === 0) throw new Error('LLM 未生成任何已通过规划的 Wiki 页面')
+      const generatedSlugs = new Set(generatedBatch.map(page => page.slug))
+      const missingCandidates = candidateBatch.filter(candidate => !generatedSlugs.has(candidate.slug))
+      if (missingCandidates.length > 0) {
+        throw new Error(`LLM 遗漏受影响词条：${missingCandidates.map(candidate => candidate.title).join('、')}`)
+      }
+      parsedPages.push(...generatedBatch)
+      }
       const consolidated = consolidatePages(parsedPages, this.ctx.wikiStorage.listPages())
       const planned = organizePages(consolidated, changes.current)
-      const preserved = this.lockedPages()
+      const plannedTopics = planned.pages.filter(page => page.pageType !== 'index')
+      const regeneratedSlugs = new Set(plannedTopics.map(page => page.slug))
+      const preserved = generation.mode === 'incremental'
+        ? storedPages.filter(page => page.pageType !== 'index'
+          && !regeneratedSlugs.has(page.slug)
+          && !orphanedSlugs.has(page.slug))
+        : this.lockedPages()
       const preservedSlugs = new Set(preserved.map(page => page.slug))
+      const generatedTopics = plannedTopics.filter(page => !preservedSlugs.has(page.slug))
+      const finalTopics = [...generatedTopics, ...preserved]
+      const indexPage = createIndexPage(finalTopics, changes.current)
       const generated = linkGeneratedPages(
-        planned.pages.filter(page => !preservedSlugs.has(page.slug)),
-        [...planned.pages, ...preserved],
+        [indexPage, ...generatedTopics],
+        [indexPage, ...finalTopics],
       )
       this.ctx.wikiStorage.replaceWiki([
         ...generated,
@@ -616,9 +695,21 @@ export class LlmWiki extends Service {
     })
   }
 
-  private lockedPages(): WikiPageWrite[] {
-    return this.ctx.wikiStorage.listPages().flatMap(summary => {
-      if (summary.state !== 'locked') return []
+  private storedPages(): WikiPageWrite[] {
+    return this.pageWrites(this.ctx.wikiStorage.listPages())
+  }
+
+  private rebuildBaselinePages(): WikiPageWrite[] {
+    const previousGeneratedAt = this.ctx.wikiStorage.lastGeneratedAt()
+    const recentlyArchived = previousGeneratedAt === undefined
+      ? []
+      : this.ctx.wikiStorage.listArchivedPages()
+        .filter(page => page.lastEditSource === 'pipeline' && page.updatedAt === previousGeneratedAt)
+    return this.pageWrites([...this.ctx.wikiStorage.listPages(), ...recentlyArchived])
+  }
+
+  private pageWrites(summaries: WikiPageSummary[]): WikiPageWrite[] {
+    return summaries.flatMap(summary => {
       const page = this.ctx.wikiStorage.getPage(summary.id)
       if (page === undefined) return []
       return [{
@@ -638,6 +729,10 @@ export class LlmWiki extends Service {
         sections: page.sections,
       }]
     })
+  }
+
+  private lockedPages(): WikiPageWrite[] {
+    return this.storedPages().filter(page => page.state === 'locked')
   }
 
   private collectChanges(): DocumentChangeSet {
@@ -754,6 +849,12 @@ function boundedInteger(value: unknown, minimum: number, maximum: number): numbe
   return Math.min(maximum, Math.max(minimum, Math.round(value)))
 }
 
+function chunks<T>(items: T[], size: number): T[][] {
+  const result: T[][] = []
+  for (let index = 0; index < items.length; index += size) result.push(items.slice(index, index + size))
+  return result
+}
+
 function candidateScore(candidate: Omit<EntryCandidate, 'score'>): number {
   let score = candidate.sourceDocumentIds.length >= 2 ? 3 : -2
   if (candidate.factCount >= 3) score += 2
@@ -762,6 +863,28 @@ function candidateScore(candidate: Omit<EntryCandidate, 'score'>): number {
   if (candidate.transient) score -= 3
   if (candidate.estimatedCharacters < 200) score -= 2
   return score
+}
+
+function candidateFromStoredPage(page: WikiPageWrite, sourceDocumentIds: string[], folderPath: string[]): EntryCandidate {
+  const pageType = page.pageType ?? 'concept'
+  const base = {
+    title: page.title,
+    slug: page.slug,
+    pageType,
+    aliases: page.aliases ?? [],
+    purpose: page.purpose ?? `维护“${page.title}”的可复用当前知识。`,
+    questions: page.questions?.length ? page.questions : [`${page.title}有哪些需要持续维护的核心信息？`],
+    folderPath,
+    sourceDocumentIds: [...new Set(sourceDocumentIds)],
+    factCount: Math.max(3, page.sections.length),
+    referencePotential: 2,
+    stableIdentity: true,
+    transient: false,
+    estimatedCharacters: Math.max(200, page.sections.reduce((total, section) => total + section.body.length, 0)),
+    reasons: ['已有词条受到来源文档变化影响，需要保持身份并局部重建。'],
+    score: 0,
+  }
+  return { ...base, score: candidateScore(base) }
 }
 
 function candidateAccepted(candidate: EntryCandidate): boolean {
@@ -949,34 +1072,37 @@ function mentionPattern(label: string): RegExp {
     : new RegExp(escaped, 'iu')
 }
 
+function createIndexPage(input: WikiPageWrite[], documents: KnowledgeDocument[]): WikiPageWrite {
+  return {
+    id: randomUUID(),
+    slug: 'index',
+    title: 'Wiki 首页',
+    summary: `汇总 ${documents.length} 篇源文档形成的主题知识导航。`,
+    pageType: 'index',
+    status: 'published',
+    aliases: [],
+    purpose: '提供整个 Wiki 的主题导航和知识入口。',
+    questions: ['当前 Wiki 包含哪些核心知识？', '我应该从哪个词条开始浏览？'],
+    order: -1,
+    state: 'ready',
+    sections: [{
+      id: randomUUID(),
+      title: '主题导航',
+      body: input.map(page => `- [[${page.slug}|${page.title}]]${page.summary === undefined || page.summary === '' ? '' : `：${page.summary}`}`).join('\n'),
+      order: 0,
+      state: 'ready',
+      sources: documents.map(wikiSource),
+    }],
+  }
+}
+
 function organizePages(input: PlannedPage[], documents: KnowledgeDocument[]): {
   pages: WikiPageWrite[]
   folders: WikiFolderWrite[]
 } {
   const planned = [...input]
   if (!planned.some(page => page.pageType === 'index')) {
-    const sources = documents.map(wikiSource)
-    planned.unshift({
-      id: randomUUID(),
-      slug: 'index',
-      title: 'Wiki 首页',
-      summary: `汇总 ${documents.length} 篇源文档形成的主题知识导航。`,
-      pageType: 'index',
-      status: 'published',
-      aliases: [],
-      purpose: '提供整个 Wiki 的主题导航和知识入口。',
-      questions: ['当前 Wiki 包含哪些核心知识？', '我应该从哪个词条开始浏览？'],
-      order: -1,
-      state: 'ready',
-      sections: [{
-        id: randomUUID(),
-        title: '主题导航',
-        body: input.map(page => `- [[${page.slug}|${page.title}]]${page.summary === undefined || page.summary === '' ? '' : `：${page.summary}`}`).join('\n'),
-        order: 0,
-        state: 'ready',
-        sources,
-      }],
-    })
+    planned.unshift(createIndexPage(input, documents))
   }
 
   const folders = new Map<string, WikiFolderWrite>()

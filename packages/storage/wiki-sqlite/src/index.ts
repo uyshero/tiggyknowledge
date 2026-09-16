@@ -478,7 +478,7 @@ export class WikiSqlite extends Service {
         UPDATE wiki_pages SET title = ?, summary = ?, page_type = ?, publication_status = ?,
           aliases_json = ?, purpose = ?, questions_json = ?, folder_id = ?, parent_id = NULL, order_index = ?, state = ?,
           version = version + ?, last_edit_source = CASE WHEN ? = 1 THEN 'pipeline' ELSE last_edit_source END,
-          updated_at = ?
+          updated_at = CASE WHEN ? = 1 THEN ? ELSE updated_at END
         WHERE id = ?
       `)
       for (const page of pages) {
@@ -502,7 +502,8 @@ export class WikiSqlite extends Service {
           page.title, metadata.summary, metadata.pageType, metadata.status,
           JSON.stringify(metadata.aliases), metadata.purpose, JSON.stringify(metadata.questions),
           page.folderId ?? null, page.order, page.state ?? 'ready',
-          contentChanged ? 1 : 0, contentChanged ? 1 : 0, generatedAt, existing.id,
+          contentChanged ? 1 : 0, contentChanged ? 1 : 0,
+          contentChanged ? 1 : 0, generatedAt, existing.id,
         )
       }
       for (const row of existingRows) {

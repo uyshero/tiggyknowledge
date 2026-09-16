@@ -25,8 +25,8 @@ button:focus-visible { outline: 2px solid #737a76; outline-offset: 2px; }
 .app-shell.sidebar-collapsed { grid-template-columns: 58px minmax(0, 1fr); }
 .app-sidebar { display: flex; min-width: 0; flex-direction: column; border-right: 1px solid #e4e7e5; background: #f6f7f6; }
 .brand-row { display: flex; height: 58px; align-items: center; gap: 10px; padding: 0 12px; border-bottom: 1px solid #e4e7e5; }
-.brand-row strong { min-width: 0; overflow: hidden; font-size: 14px; text-overflow: ellipsis; }
-.brand-mark { display: grid; width: 30px; height: 30px; flex: 0 0 30px; place-items: center; border-radius: 6px; background: #454b47; color: white; font-size: 15px; font-weight: 700; }
+.brand-row strong { min-width: 0; overflow: hidden; font-size: 14px; white-space: nowrap; text-overflow: ellipsis; }
+.brand-mark { display: block; width: 30px; height: 30px; flex: 0 0 30px; border-radius: 50%; object-fit: cover; background: #111; }
 .sidebar-toggle { display: grid; width: 30px; height: 30px; margin-left: auto; place-items: center; border: 0; border-radius: 5px; background: transparent; cursor: pointer; }
 .sidebar-toggle:hover { background: #e9ecea; }
 .sidebar-collapsed .brand-row { padding: 0 14px; }

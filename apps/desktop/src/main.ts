@@ -64,7 +64,7 @@ async function createWindow(): Promise<void> {
     minHeight: 640,
     icon: resolve(import.meta.dirname, '../build/icon.png'),
     show: false,
-    title: 'TiggyKnowledge',
+    title: '小虎AI知识库',
     backgroundColor: '#ffffff',
     webPreferences: {
       contextIsolation: true,
@@ -124,7 +124,7 @@ async function createWindow(): Promise<void> {
 function installApplicationMenu(): void {
   const template: Electron.MenuItemConstructorOptions[] = [
     {
-      label: 'TiggyKnowledge',
+      label: '小虎AI知识库',
       submenu: [
         { role: 'about' },
         { type: 'separator' },
@@ -248,7 +248,7 @@ async function stopHost(): Promise<void> {
 async function start(): Promise<void> {
   if (!hasSingleInstanceLock) return
   await app.whenReady()
-  app.setName('TiggyKnowledge')
+  app.setName('小虎AI知识库')
   installApplicationMenu()
 
   app.on('second-instance', () => {

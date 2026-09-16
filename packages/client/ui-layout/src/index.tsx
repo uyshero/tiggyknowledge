@@ -3,6 +3,7 @@ import { PanelLeftClose, PanelLeftOpen, Tag } from 'lucide-react'
 import { useState, useSyncExternalStore, type JSX } from 'react'
 import { createRoot } from 'react-dom/client'
 import type {} from '@tiggyknowledge/client-runtime'
+import brandIcon from './brand-icon.png'
 import './styles.css'
 
 export const inject = ['clientApp']
@@ -20,8 +21,8 @@ export function apply(ctx: Context): void {
       <div className={`app-shell ${collapsed ? 'sidebar-collapsed' : ''}`}>
         <aside className="app-sidebar">
           <div className="brand-row">
-            <div className="brand-mark">T</div>
-            {!collapsed && <strong>tiggyknowledge</strong>}
+            <img className="brand-mark" src={brandIcon} alt="" />
+            {!collapsed && <strong>小虎AI知识库</strong>}
             <button className="sidebar-toggle" type="button" title={collapsed ? '展开侧栏' : '收起侧栏'} onClick={() => setCollapsed(value => !value)}>
               {collapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}
             </button>
