@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, Menu, net, shell } from 'electron'
+import { app, BrowserWindow, dialog, Menu, net, safeStorage, shell } from 'electron'
 import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
@@ -81,6 +81,39 @@ async function createWindow(): Promise<void> {
   window.webContents.on('will-navigate', (event, url) => {
     if (!isSameOrigin(url, localOrigin)) event.preventDefault()
   })
+  window.webContents.on('before-input-event', (event, input) => {
+    if (input.type !== 'keyDown') return
+    const commandModifier = process.platform === 'darwin' ? input.meta : input.control
+    if (!commandModifier || input.alt) return
+    const key = input.key.toLowerCase()
+    if (key === 'v') window?.webContents.paste()
+    else if (key === 'c') window?.webContents.copy()
+    else if (key === 'x') window?.webContents.cut()
+    else if (key === 'a') window?.webContents.selectAll()
+    else if (key === 'z' && input.shift) window?.webContents.redo()
+    else if (key === 'z') window?.webContents.undo()
+    else return
+    event.preventDefault()
+  })
+  window.webContents.on('context-menu', (_event, params) => {
+    if (!params.isEditable && params.selectionText.length === 0) return
+    const menu = Menu.buildFromTemplate([
+      ...(params.selectionText.length === 0 ? [] : [
+        { role: 'copy' as const, enabled: params.editFlags.canCopy },
+        { type: 'separator' as const },
+      ]),
+      ...(params.isEditable ? [
+        { role: 'cut' as const, enabled: params.editFlags.canCut },
+        { role: 'paste' as const },
+        { role: 'pasteAndMatchStyle' as const },
+        { role: 'delete' as const, enabled: params.editFlags.canDelete },
+        { type: 'separator' as const },
+      ] : []),
+      { role: 'selectAll' as const, enabled: params.editFlags.canSelectAll },
+    ])
+    if (window === undefined) return
+    menu.popup({ window })
+  })
   window.on('closed', () => {
     window = undefined
   })
@@ -110,6 +143,21 @@ function installApplicationMenu(): void {
         { label: '新建窗口', accelerator: 'CmdOrCtrl+N', click: () => void createWindow().catch(handleStartupError) },
         { type: 'separator' },
         { role: 'close' },
+      ],
+    },
+    {
+      label: '编辑',
+      submenu: [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        { role: 'pasteAndMatchStyle' },
+        { role: 'delete' },
+        { type: 'separator' },
+        { role: 'selectAll' },
       ],
     },
     {
@@ -220,6 +268,16 @@ async function start(): Promise<void> {
     dataRoot,
     distRoot: resolve(root, 'apps/web/dist'),
     port: configuredPort,
+    secretCodec: {
+      encrypt(value) {
+        if (!safeStorage.isEncryptionAvailable()) throw new Error('系统安全存储当前不可用')
+        return safeStorage.encryptString(value).toString('base64')
+      },
+      decrypt(value) {
+        if (!safeStorage.isEncryptionAvailable()) throw new Error('系统安全存储当前不可用')
+        return safeStorage.decryptString(Buffer.from(value, 'base64'))
+      },
+    },
   })
   try {
     await createWindow()

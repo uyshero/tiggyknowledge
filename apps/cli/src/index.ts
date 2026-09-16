@@ -5,6 +5,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { Context, FiberState } from '@deepseek-ai/cordis'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import type {} from '@tiggyknowledge/webserver'
+import type { SecretCodec } from '@tiggyknowledge/llm-credentials'
 import { composeEntries, parseArguments } from './config.ts'
 
 declare module '@deepseek-ai/cordis' {
@@ -14,6 +15,7 @@ declare module '@deepseek-ai/cordis' {
     webDistRoot: string
     webPort: number
     appVersion: string
+    secretCodec: SecretCodec | undefined
   }
 }
 
@@ -24,6 +26,7 @@ export interface BootOptions {
   dataRoot?: string
   distRoot?: string
   port?: number
+  secretCodec?: SecretCodec
 }
 
 function readProjectVersion(projectRoot: string): string {
@@ -57,13 +60,14 @@ export async function boot(patchFiles: string[] = [], options: BootOptions = {})
   ])
 
   const ctx = new Context()
-  const baseUrl = pathToFileURL(resolve(projectRoot, 'package.json')).href
+  const baseUrl = pathToFileURL(resolve(projectRoot, 'apps/cli/package.json')).href
   ctx.baseUrl = baseUrl
   ctx.provide('projectRoot', projectRoot)
   ctx.provide('dataRoot', dataRoot)
   ctx.provide('webDistRoot', distRoot)
   ctx.provide('webPort', port)
   ctx.provide('appVersion', readProjectVersion(projectRoot))
+  if (options.secretCodec !== undefined) ctx.provide('secretCodec', options.secretCodec)
   try {
     await ctx.plugin(Loader, { baseUrl })
     await ctx.loader.root.update(entries)

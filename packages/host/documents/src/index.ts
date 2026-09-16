@@ -35,6 +35,7 @@ export class KnowledgeDocuments extends Service {
     const document = this.ctx.knowledgeCatalog.updateDocument(documentId, { title })
     this.ctx.knowledgeIndex.updateTitle(document.id, document.title)
     this.ctx.emit('knowledge/graph/invalidate')
+    this.ctx.emit('knowledge/document/changed', [document.id])
     return document
   }
 
@@ -63,6 +64,7 @@ export class KnowledgeDocuments extends Service {
       throw error
     }
     this.ctx.emit('knowledge/graph/invalidate')
+    this.ctx.emit('knowledge/document/changed', [updated.id])
     return updated
   }
 
@@ -76,6 +78,7 @@ export class KnowledgeDocuments extends Service {
       this.ctx.logger('documents').warn('failed to clean deleted library index', error)
     }
     this.ctx.emit('knowledge/graph/invalidate')
+    this.ctx.emit('knowledge/document/deleted', deletedDocumentIds)
     return { deletedLibraryId: libraryId, deletedDocumentIds }
   }
 
@@ -87,7 +90,9 @@ export class KnowledgeDocuments extends Service {
     const deleted = this.ctx.knowledgeCatalog.deleteDocuments(normalized)
     this.ctx.knowledgeIndex.removeDocuments(deleted.map(document => document.id))
     this.ctx.emit('knowledge/graph/invalidate')
-    return { deletedIds: deleted.map(document => document.id) }
+    const deletedIds = deleted.map(document => document.id)
+    this.ctx.emit('knowledge/document/deleted', deletedIds)
+    return { deletedIds }
   }
 }
 

@@ -38,6 +38,7 @@ import type {
 import type {} from '@tiggyknowledge/document-metadata'
 import type {} from '@tiggyknowledge/documents'
 import type {} from '@tiggyknowledge/graph'
+import { HttpError } from '@tiggyknowledge/http-router'
 import type {} from '@tiggyknowledge/ingestion-tags'
 import type {} from '@tiggyknowledge/note-creator'
 import type {} from '@tiggyknowledge/okf'
@@ -76,12 +77,6 @@ const MAX_JSON_BODY_BYTES = 16 * 1024
 const MAX_UPLOAD_BODY_BYTES = 50 * 1024 * 1024
 const MAX_UPLOAD_FILE_BYTES = 25 * 1024 * 1024
 const MAX_UPLOAD_FILES = 50
-
-class HttpError extends Error {
-  constructor(readonly status: number, readonly code: string, message: string) {
-    super(message)
-  }
-}
 
 export interface PaginatedContent {
   content: string
@@ -163,7 +158,7 @@ function extensionOf(path: string): string {
 }
 
 export class WebServer extends Service {
-  static inject = ['knowledgeCatalog', 'knowledgeTaggedIngestion', 'knowledgeNoteCreator', 'knowledgeDocuments', 'knowledgePreview', 'knowledgeMetadata', 'knowledgeOkf', 'knowledgeOkfExport', 'knowledgeQuery', 'knowledgeSemanticCapabilities', 'settings', 'storageManager', 'clientBootstrap', 'pluginInventory']
+  static inject = ['knowledgeCatalog', 'knowledgeTaggedIngestion', 'knowledgeNoteCreator', 'knowledgeDocuments', 'knowledgePreview', 'knowledgeMetadata', 'knowledgeOkf', 'knowledgeOkfExport', 'knowledgeQuery', 'knowledgeSemanticCapabilities', 'settings', 'storageManager', 'clientBootstrap', 'pluginInventory', 'httpRouter']
 
   private readonly config: Config
   private listeningPort: number | undefined
@@ -243,6 +238,7 @@ export class WebServer extends Service {
         semanticSearch: this.ctx.knowledgeSemanticCapabilities.snapshot(),
         hostPlugins: this.ctx.pluginInventory.list(),
         clientBoot: this.ctx.clientBootstrap.manifest(),
+        ...this.ctx.httpRouter.snapshot(),
       }
       this.json(response, snapshot)
       return
@@ -696,6 +692,7 @@ export class WebServer extends Service {
       }
       return
     }
+    if (await this.ctx.httpRouter.dispatch(request, response, url)) return
     if (pathname.startsWith('/api/')) throw new HttpError(404, 'api_not_found', '接口不存在')
     if (method !== 'GET') return this.methodNotAllowed(response, ['GET'])
     this.staticFile(pathname, response)

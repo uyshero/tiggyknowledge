@@ -66,6 +66,7 @@ export class KnowledgeIngestion extends Service {
         const chunks = this.ctx.knowledgeChunker.chunk({ body: produced.body, sourceType: produced.sourceType })
         this.ctx.knowledgeIndex.index({ id: document.id, libraryId, title: document.title }, chunks)
         document = this.ctx.knowledgeCatalog.setDocumentIndexStatus(document.id, 'ready')
+        this.ctx.emit('knowledge/document/changed', [document.id])
         return { fileName: file.name, status: 'imported', document }
       } catch (error) {
         this.ctx.knowledgeCatalog.setDocumentIndexStatus(document.id, 'failed')

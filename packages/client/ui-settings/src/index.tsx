@@ -16,6 +16,8 @@ export function apply(ctx: Context): void {
     const [selectedPanelId, setSelectedPanelId] = useState<string>()
     const [system, setSystem] = useState<SystemSnapshot>()
     const [error, setError] = useState<string>()
+    const requestedPanelId = typeof app.pageState === 'object' && app.pageState !== null && 'panelId' in app.pageState
+      && typeof app.pageState.panelId === 'string' ? app.pageState.panelId : undefined
 
     useEffect(() => {
       const controller = new AbortController()
@@ -29,10 +31,11 @@ export function apply(ctx: Context): void {
 
     useEffect(() => {
       setSelectedPanelId(value => {
+        if (requestedPanelId !== undefined && app.settingsPanels.some(panel => panel.id === requestedPanelId)) return requestedPanelId
         if (value !== undefined && app.settingsPanels.some(panel => panel.id === value)) return value
         return app.settingsPanels.find(panel => panel.default)?.id ?? app.settingsPanels[0]?.id
       })
-    }, [app.settingsPanels])
+    }, [app.settingsPanels, requestedPanelId])
 
     const pluginPanels = app.settingsPanels.filter(panel => PLUGIN_PANEL_IDS.has(panel.id))
     const navPanels = [

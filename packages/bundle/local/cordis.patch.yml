@@ -65,6 +65,14 @@
     - id: semantic-capabilities
       name: '@tiggyknowledge/semantic-capabilities'
 
+    - id: http-router
+      name: '@tiggyknowledge/http-router'
+
+    - id: wiki-store
+      name: '@tiggyknowledge/wiki-sqlite'
+      config:
+        dataDir: !!js ctx.dataRoot
+
     - id: knowledge-query
       name: '@tiggyknowledge/query'
 
@@ -72,6 +80,28 @@
       name: '@tiggyknowledge/settings-file'
       config:
         path: !!js ctx.dataRoot + '/settings.yaml'
+
+    - id: llm-credentials
+      name: '@tiggyknowledge/llm-credentials'
+      config:
+        dataDir: !!js ctx.dataRoot
+
+    - id: llm-client
+      name: '@tiggyknowledge/llm-client'
+
+    - id: llm-wiki
+      name: '@tiggyknowledge/llm-wiki'
+
+    - id: llm-api
+      name: '@tiggyknowledge/llm-api'
+
+    - id: wiki-governance
+      name: '@tiggyknowledge/wiki-governance'
+      config:
+        dataDir: !!js ctx.dataRoot
+
+    - id: wiki-governance-api
+      name: '@tiggyknowledge/wiki-governance-api'
 
     - id: storage-manager
       name: '@tiggyknowledge/storage-manager'
@@ -128,6 +158,14 @@
             moduleName: '@tiggyknowledge/client-ui-search'
             label: Search
             description: Keyword search workbench
+          - id: client-ui-wiki
+            moduleName: '@tiggyknowledge/client-ui-wiki'
+            label: LLM Wiki
+            description: Global generated knowledge wiki
+          - id: client-wiki-governance
+            moduleName: '@tiggyknowledge/client-wiki-governance'
+            label: Wiki Governance
+            description: Personal wiki versions, issues, lint, and recycle bin
           - id: client-ui-settings
             moduleName: '@tiggyknowledge/client-ui-settings'
             label: Settings
@@ -148,6 +186,10 @@
             moduleName: '@tiggyknowledge/client-settings-dsh-integration'
             label: 智能体集成
             description: 智能体接入与只读知识库配置
+          - id: client-settings-llm
+            moduleName: '@tiggyknowledge/client-settings-llm'
+            label: AI 模型
+            description: OpenAI 兼容模型配置
           - id: client-settings-plugins
             moduleName: '@tiggyknowledge/client-settings-plugins'
             label: Plugin Inventory

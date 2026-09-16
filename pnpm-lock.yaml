@@ -90,6 +90,9 @@ importers:
       '@tiggyknowledge/graph':
         specifier: workspace:^
         version: link:../../packages/host/graph
+      '@tiggyknowledge/http-router':
+        specifier: workspace:^
+        version: link:../../packages/host/http-router
       '@tiggyknowledge/index-fts':
         specifier: workspace:^
         version: link:../../packages/host/index-fts
@@ -99,6 +102,18 @@ importers:
       '@tiggyknowledge/ingestion-tags':
         specifier: workspace:^
         version: link:../../packages/host/ingestion-tags
+      '@tiggyknowledge/llm-api':
+        specifier: workspace:^
+        version: link:../../packages/host/llm-api
+      '@tiggyknowledge/llm-client':
+        specifier: workspace:^
+        version: link:../../packages/host/llm-client
+      '@tiggyknowledge/llm-credentials':
+        specifier: workspace:^
+        version: link:../../packages/settings/llm-credentials
+      '@tiggyknowledge/llm-wiki':
+        specifier: workspace:^
+        version: link:../../packages/host/llm-wiki
       '@tiggyknowledge/metadata-sqlite':
         specifier: workspace:^
         version: link:../../packages/storage/metadata-sqlite
@@ -141,6 +156,15 @@ importers:
       '@tiggyknowledge/webserver':
         specifier: workspace:^
         version: link:../../packages/host/webserver
+      '@tiggyknowledge/wiki-governance':
+        specifier: workspace:^
+        version: link:../../packages/host/wiki-governance
+      '@tiggyknowledge/wiki-governance-api':
+        specifier: workspace:^
+        version: link:../../packages/host/wiki-governance-api
+      '@tiggyknowledge/wiki-sqlite':
+        specifier: workspace:^
+        version: link:../../packages/storage/wiki-sqlite
       js-yaml:
         specifier: ^4.1.0
         version: 4.3.1
@@ -185,66 +209,6 @@ importers:
       '@deepseek-ai/cordis-plugin-loader':
         specifier: workspace:^
         version: link:../../vendor/loader
-      '@tiggyknowledge/client-action-okf-export':
-        specifier: workspace:^
-        version: link:../../packages/client/action-okf-export
-      '@tiggyknowledge/client-connection':
-        specifier: workspace:^
-        version: link:../../packages/client/connection
-      '@tiggyknowledge/client-inspector-okf':
-        specifier: workspace:^
-        version: link:../../packages/client/inspector-okf
-      '@tiggyknowledge/client-note-create':
-        specifier: workspace:^
-        version: link:../../packages/client/note-create
-      '@tiggyknowledge/client-preview-pdf':
-        specifier: workspace:^
-        version: link:../../packages/client/preview-pdf
-      '@tiggyknowledge/client-runtime':
-        specifier: workspace:^
-        version: link:../../packages/client/runtime
-      '@tiggyknowledge/client-settings-config':
-        specifier: workspace:^
-        version: link:../../packages/client/settings-config
-      '@tiggyknowledge/client-settings-dsh-integration':
-        specifier: workspace:^
-        version: link:../../packages/client/settings-dsh-integration
-      '@tiggyknowledge/client-settings-general':
-        specifier: workspace:^
-        version: link:../../packages/client/settings-general
-      '@tiggyknowledge/client-settings-plugins':
-        specifier: workspace:^
-        version: link:../../packages/client/settings-plugins
-      '@tiggyknowledge/client-settings-storage':
-        specifier: workspace:^
-        version: link:../../packages/client/settings-storage
-      '@tiggyknowledge/client-ui-documents':
-        specifier: workspace:^
-        version: link:../../packages/client/ui-documents
-      '@tiggyknowledge/client-ui-favorites':
-        specifier: workspace:^
-        version: link:../../packages/client/ui-favorites
-      '@tiggyknowledge/client-ui-graph':
-        specifier: workspace:^
-        version: link:../../packages/client/ui-graph
-      '@tiggyknowledge/client-ui-ingestion':
-        specifier: workspace:^
-        version: link:../../packages/client/ui-ingestion
-      '@tiggyknowledge/client-ui-knowledge':
-        specifier: workspace:^
-        version: link:../../packages/client/ui-knowledge
-      '@tiggyknowledge/client-ui-layout':
-        specifier: workspace:^
-        version: link:../../packages/client/ui-layout
-      '@tiggyknowledge/client-ui-search':
-        specifier: workspace:^
-        version: link:../../packages/client/ui-search
-      '@tiggyknowledge/client-ui-settings':
-        specifier: workspace:^
-        version: link:../../packages/client/ui-settings
-      '@tiggyknowledge/client-ui-tags':
-        specifier: workspace:^
-        version: link:../../packages/client/ui-tags
       lucide-react:
         specifier: ^0.468.0
         version: 0.468.0(react@18.2.0)
@@ -456,6 +420,31 @@ importers:
       '@tiggyknowledge/client-runtime':
         specifier: workspace:^
         version: link:../runtime
+      '@types/react':
+        specifier: ~18.3.1
+        version: 18.3.31
+
+  packages/client/settings-llm:
+    dependencies:
+      lucide-react:
+        specifier: ^0.468.0
+        version: 0.468.0(react@18.2.0)
+      react:
+        specifier: ^18.2.0
+        version: 18.2.0
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@tiggyknowledge/client-connection':
+        specifier: workspace:^
+        version: link:../connection
+      '@tiggyknowledge/client-runtime':
+        specifier: workspace:^
+        version: link:../runtime
+      '@tiggyknowledge/contracts':
+        specifier: workspace:^
+        version: link:../../core/contracts
       '@types/react':
         specifier: ~18.3.1
         version: 18.3.31
@@ -726,6 +715,56 @@ importers:
         specifier: ~18.3.1
         version: 18.3.31
 
+  packages/client/ui-wiki:
+    dependencies:
+      lucide-react:
+        specifier: ^0.468.0
+        version: 0.468.0(react@18.2.0)
+      react:
+        specifier: ^18.2.0
+        version: 18.2.0
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@tiggyknowledge/client-connection':
+        specifier: workspace:^
+        version: link:../connection
+      '@tiggyknowledge/client-runtime':
+        specifier: workspace:^
+        version: link:../runtime
+      '@tiggyknowledge/contracts':
+        specifier: workspace:^
+        version: link:../../core/contracts
+      '@types/react':
+        specifier: ~18.3.1
+        version: 18.3.31
+
+  packages/client/wiki-governance:
+    dependencies:
+      lucide-react:
+        specifier: ^0.468.0
+        version: 0.468.0(react@18.2.0)
+      react:
+        specifier: ^18.2.0
+        version: 18.2.0
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@tiggyknowledge/client-connection':
+        specifier: workspace:^
+        version: link:../connection
+      '@tiggyknowledge/client-runtime':
+        specifier: workspace:^
+        version: link:../runtime
+      '@tiggyknowledge/contracts':
+        specifier: workspace:^
+        version: link:../../core/contracts
+      '@types/react':
+        specifier: ~18.3.1
+        version: 18.3.31
+
   packages/core/contracts: {}
 
   packages/dsh/connector:
@@ -818,6 +857,12 @@ importers:
         specifier: workspace:^
         version: link:../preview-text
 
+  packages/host/http-router:
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+
   packages/host/index-fts:
     devDependencies:
       '@deepseek-ai/cordis':
@@ -883,6 +928,69 @@ importers:
       '@tiggyknowledge/producer-text':
         specifier: workspace:^
         version: link:../producer-text
+
+  packages/host/llm-api:
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@tiggyknowledge/contracts':
+        specifier: workspace:^
+        version: link:../../core/contracts
+      '@tiggyknowledge/http-router':
+        specifier: workspace:^
+        version: link:../http-router
+      '@tiggyknowledge/llm-client':
+        specifier: workspace:^
+        version: link:../llm-client
+      '@tiggyknowledge/llm-credentials':
+        specifier: workspace:^
+        version: link:../../settings/llm-credentials
+      '@tiggyknowledge/llm-wiki':
+        specifier: workspace:^
+        version: link:../llm-wiki
+      '@tiggyknowledge/settings-file':
+        specifier: workspace:^
+        version: link:../../settings/settings-file
+
+  packages/host/llm-client:
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@tiggyknowledge/contracts':
+        specifier: workspace:^
+        version: link:../../core/contracts
+      '@tiggyknowledge/llm-credentials':
+        specifier: workspace:^
+        version: link:../../settings/llm-credentials
+
+  packages/host/llm-wiki:
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@tiggyknowledge/catalog-sqlite':
+        specifier: workspace:^
+        version: link:../../storage/catalog-sqlite
+      '@tiggyknowledge/contracts':
+        specifier: workspace:^
+        version: link:../../core/contracts
+      '@tiggyknowledge/llm-client':
+        specifier: workspace:^
+        version: link:../llm-client
+      '@tiggyknowledge/llm-credentials':
+        specifier: workspace:^
+        version: link:../../settings/llm-credentials
+      '@tiggyknowledge/preview-text':
+        specifier: workspace:^
+        version: link:../preview-text
+      '@tiggyknowledge/settings-file':
+        specifier: workspace:^
+        version: link:../../settings/settings-file
+      '@tiggyknowledge/wiki-sqlite':
+        specifier: workspace:^
+        version: link:../../storage/wiki-sqlite
 
   packages/host/note-creator:
     devDependencies:
@@ -1156,6 +1264,9 @@ importers:
       '@tiggyknowledge/documents':
         specifier: workspace:^
         version: link:../documents
+      '@tiggyknowledge/http-router':
+        specifier: workspace:^
+        version: link:../http-router
       '@tiggyknowledge/ingestion-tags':
         specifier: workspace:^
         version: link:../ingestion-tags
@@ -1186,6 +1297,39 @@ importers:
       '@tiggyknowledge/storage-manager':
         specifier: workspace:^
         version: link:../storage-manager
+
+  packages/host/wiki-governance:
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@tiggyknowledge/contracts':
+        specifier: workspace:^
+        version: link:../../core/contracts
+      '@tiggyknowledge/wiki-sqlite':
+        specifier: workspace:^
+        version: link:../../storage/wiki-sqlite
+
+  packages/host/wiki-governance-api:
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@tiggyknowledge/contracts':
+        specifier: workspace:^
+        version: link:../../core/contracts
+      '@tiggyknowledge/http-router':
+        specifier: workspace:^
+        version: link:../http-router
+      '@tiggyknowledge/wiki-governance':
+        specifier: workspace:^
+        version: link:../wiki-governance
+
+  packages/settings/llm-credentials:
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
 
   packages/settings/settings-file:
     dependencies:
@@ -1219,6 +1363,15 @@ importers:
         version: link:../../../vendor/cordis
 
   packages/storage/metadata-sqlite:
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@tiggyknowledge/contracts':
+        specifier: workspace:^
+        version: link:../../core/contracts
+
+  packages/storage/wiki-sqlite:
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:^

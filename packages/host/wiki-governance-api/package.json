@@ -1,0 +1,25 @@
+{
+  "name": "@tiggyknowledge/wiki-governance-api",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "workspace:^",
+    "@tiggyknowledge/http-router": "workspace:^",
+    "@tiggyknowledge/wiki-governance": "workspace:^"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "workspace:^",
+    "@tiggyknowledge/contracts": "workspace:^",
+    "@tiggyknowledge/http-router": "workspace:^",
+    "@tiggyknowledge/wiki-governance": "workspace:^"
+  }
+}

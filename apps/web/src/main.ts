@@ -1,48 +1,31 @@
 import { Context, FiberState } from '@deepseek-ai/cordis'
 import Loader, { type EntryOptions } from '@deepseek-ai/cordis-plugin-loader'
 import type { ClientPluginDescriptor, SystemSnapshot } from '@tiggyknowledge/contracts'
-import * as ConnectionPlugin from '@tiggyknowledge/client-connection'
-import * as RuntimePlugin from '@tiggyknowledge/client-runtime'
-import * as KnowledgePlugin from '@tiggyknowledge/client-ui-knowledge'
-import * as IngestionPlugin from '@tiggyknowledge/client-ui-ingestion'
-import * as DocumentsPlugin from '@tiggyknowledge/client-ui-documents'
-import * as GraphPlugin from '@tiggyknowledge/client-ui-graph'
-import * as OkfInspectorPlugin from '@tiggyknowledge/client-inspector-okf'
-import * as OkfExportActionPlugin from '@tiggyknowledge/client-action-okf-export'
-import * as NoteCreatePlugin from '@tiggyknowledge/client-note-create'
-import * as TagsPlugin from '@tiggyknowledge/client-ui-tags'
-import * as FavoritesPlugin from '@tiggyknowledge/client-ui-favorites'
-import * as SearchPlugin from '@tiggyknowledge/client-ui-search'
-import * as SettingsPlugin from '@tiggyknowledge/client-ui-settings'
-import * as GeneralSettingsPlugin from '@tiggyknowledge/client-settings-general'
-import * as StorageSettingsPlugin from '@tiggyknowledge/client-settings-storage'
-import * as ConfigSettingsPlugin from '@tiggyknowledge/client-settings-config'
-import * as DshIntegrationSettingsPlugin from '@tiggyknowledge/client-settings-dsh-integration'
-import * as PluginsSettingsPlugin from '@tiggyknowledge/client-settings-plugins'
-import * as LayoutPlugin from '@tiggyknowledge/client-ui-layout'
 
-const MODULES: Record<string, unknown | (() => Promise<unknown>)> = {
-  '@tiggyknowledge/client-connection': ConnectionPlugin,
-  '@tiggyknowledge/client-runtime': RuntimePlugin,
-  '@tiggyknowledge/client-ui-knowledge': KnowledgePlugin,
-  '@tiggyknowledge/client-ui-ingestion': IngestionPlugin,
-  '@tiggyknowledge/client-ui-documents': DocumentsPlugin,
-  '@tiggyknowledge/client-ui-graph': GraphPlugin,
-  '@tiggyknowledge/client-inspector-okf': OkfInspectorPlugin,
-  '@tiggyknowledge/client-action-okf-export': OkfExportActionPlugin,
-  '@tiggyknowledge/client-note-create': NoteCreatePlugin,
-  '@tiggyknowledge/client-preview-pdf': () => import('@tiggyknowledge/client-preview-pdf'),
-  '@tiggyknowledge/client-ui-tags': TagsPlugin,
-  '@tiggyknowledge/client-ui-favorites': FavoritesPlugin,
-  '@tiggyknowledge/client-ui-search': SearchPlugin,
-  '@tiggyknowledge/client-ui-settings': SettingsPlugin,
-  '@tiggyknowledge/client-settings-general': GeneralSettingsPlugin,
-  '@tiggyknowledge/client-settings-storage': StorageSettingsPlugin,
-  '@tiggyknowledge/client-settings-config': ConfigSettingsPlugin,
-  '@tiggyknowledge/client-settings-dsh-integration': DshIntegrationSettingsPlugin,
-  '@tiggyknowledge/client-settings-plugins': PluginsSettingsPlugin,
-  '@tiggyknowledge/client-ui-layout': LayoutPlugin,
+interface ClientPackageManifest {
+  name?: unknown
 }
+
+const PACKAGE_MANIFESTS = import.meta.glob('../../../packages/client/*/package.json', {
+  eager: true,
+  import: 'default',
+}) as Record<string, ClientPackageManifest>
+const PACKAGE_MODULES = import.meta.glob('../../../packages/client/*/src/index.{ts,tsx}')
+
+function discoverBundledModules(): Map<string, () => Promise<unknown>> {
+  const modules = new Map<string, () => Promise<unknown>>()
+  for (const [manifestPath, manifest] of Object.entries(PACKAGE_MANIFESTS)) {
+    if (typeof manifest.name !== 'string' || manifest.name.length === 0) continue
+    const directory = manifestPath.slice(0, -'/package.json'.length)
+    const load = PACKAGE_MODULES[`${directory}/src/index.ts`] ?? PACKAGE_MODULES[`${directory}/src/index.tsx`]
+    if (load === undefined) continue
+    if (modules.has(manifest.name)) throw new Error(`web boot: duplicate client module: ${manifest.name}`)
+    modules.set(manifest.name, load)
+  }
+  return modules
+}
+
+const BUNDLED_MODULES = discoverBundledModules()
 
 async function readBootManifest(): Promise<ClientPluginDescriptor[]> {
   const response = await fetch('/api/system')
@@ -57,9 +40,9 @@ async function boot(): Promise<void> {
   const ctx = new Context()
   await ctx.plugin(Loader)
   const entries: EntryOptions[] = await Promise.all(plugins.map(async plugin => {
-    const bundled = MODULES[plugin.moduleName]
-    if (bundled === undefined) throw new Error(`web boot: client module is not bundled: ${plugin.moduleName}`)
-    const implementation = typeof bundled === 'function' ? await bundled() : bundled
+    const load = BUNDLED_MODULES.get(plugin.moduleName)
+    if (load === undefined) throw new Error(`web boot: client module is not bundled: ${plugin.moduleName}`)
+    const implementation = await load()
     ctx.loader.builtins[plugin.moduleName] = implementation
     return { id: plugin.id, name: `cordis:${plugin.moduleName}` }
   }))

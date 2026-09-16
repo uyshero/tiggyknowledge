@@ -11,6 +11,7 @@
     { "path": "./packages/client/settings-storage" },
     { "path": "./packages/client/settings-config" },
     { "path": "./packages/client/settings-dsh-integration" },
+    { "path": "./packages/client/settings-llm" },
     { "path": "./packages/client/settings-plugins" },
     { "path": "./packages/client/preview-pdf" },
     { "path": "./packages/client/inspector-okf" },
@@ -23,6 +24,8 @@
     { "path": "./packages/client/ui-tags" },
     { "path": "./packages/client/ui-favorites" },
     { "path": "./packages/client/ui-search" },
+    { "path": "./packages/client/ui-wiki" },
+    { "path": "./packages/client/wiki-governance" },
     { "path": "./packages/client/ui-settings" },
     { "path": "./packages/client/ui-layout" },
     { "path": "./apps/web" }

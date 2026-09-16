@@ -327,6 +327,226 @@ export interface DshIntegrationSettings {
   accessKey?: DshIntegrationAccessKeyMetadata
 }
 
+export interface LlmIntegrationSettings {
+  enabled: boolean
+  baseUrl: string
+  model: string
+  requestTimeoutMs: number
+  maxInputTokens: number
+  maxOutputTokens: number
+  apiKeyConfigured: boolean
+  apiKeyPreview?: string
+}
+
+export interface UpdateLlmIntegrationSettingsInput {
+  enabled?: boolean
+  baseUrl?: string
+  model?: string
+  requestTimeoutMs?: number
+  maxInputTokens?: number
+  maxOutputTokens?: number
+}
+
+export interface SetLlmApiKeyInput {
+  apiKey: string
+}
+
+export interface TestLlmConnectionResult {
+  ok: true
+  model: string
+  message: string
+}
+
+export type WikiGenerationMode = 'initial' | 'incremental' | 'rebuild'
+export type WikiGenerationState = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
+export type WikiState = 'never-generated' | 'ready' | 'stale' | 'generating' | 'failed'
+export type WikiSectionState = 'ready' | 'stale' | 'source-missing' | 'locked'
+export type WikiPageType =
+  | 'summary'
+  | 'entity'
+  | 'concept'
+  | 'glossary'
+  | 'project'
+  | 'policy'
+  | 'procedure'
+  | 'decision'
+  | 'topic'
+  | 'index'
+  | 'synthesis'
+  | 'comparison'
+export type WikiPageStatus = 'draft' | 'published' | 'archived'
+export type WikiEditSource = 'pipeline' | 'user' | 'revert'
+
+export interface WikiChangeSummary {
+  totalDocuments: number
+  added: number
+  updated: number
+  deleted: number
+}
+
+export interface WikiSource {
+  documentId: string
+  libraryId: string
+  title: string
+  referenceUri: `tk://local/${string}`
+  contentHash: string
+}
+
+export interface WikiSection {
+  id: string
+  title: string
+  body: string
+  order: number
+  state: WikiSectionState
+  sources: WikiSource[]
+}
+
+export interface WikiPageSummary {
+  id: string
+  slug: string
+  title: string
+  summary: string
+  pageType: WikiPageType
+  status: WikiPageStatus
+  aliases: string[]
+  purpose: string
+  questions: string[]
+  folderId?: string
+  parentId?: string
+  order: number
+  state: WikiSectionState
+  version: number
+  lastEditSource: WikiEditSource
+  updatedAt: string
+}
+
+export interface WikiPage extends WikiPageSummary {
+  sections: WikiSection[]
+  outLinks: string[]
+  inLinks: string[]
+}
+
+export interface WikiFolder {
+  id: string
+  name: string
+  path: string
+  parentId?: string
+  depth: number
+  order: number
+}
+
+export interface WikiStatus {
+  state: WikiState
+  llmConfigured: boolean
+  pageCount: number
+  lastGeneratedAt?: string
+  activeGenerationId?: string
+  lastGeneration?: WikiGeneration
+  changes: WikiChangeSummary
+}
+
+export interface WikiEstimate {
+  mode: WikiGenerationMode
+  documentsToProcess: number
+  estimatedInputTokens: number
+  changes: WikiChangeSummary
+}
+
+export interface WikiGeneration {
+  id: string
+  mode: WikiGenerationMode
+  state: WikiGenerationState
+  phase: string
+  totalSteps: number
+  completedSteps: number
+  estimatedInputTokens: number
+  inputTokens: number
+  outputTokens: number
+  candidateCount?: number
+  acceptedCandidateCount?: number
+  createdAt: string
+  completedAt?: string
+  error?: string
+}
+
+export interface StartWikiGenerationInput {
+  mode: WikiGenerationMode
+}
+
+export interface UpdateWikiPageInput {
+  title: string
+  summary?: string
+  pageType?: WikiPageType
+  status?: WikiPageStatus
+  aliases?: string[]
+  purpose?: string
+  questions?: string[]
+  expectedVersion: number
+  sections: Array<Pick<WikiSection, 'id' | 'title' | 'body'>>
+}
+
+export interface WikiPageRevision {
+  pageId: string
+  version: number
+  title: string
+  summary: string
+  pageType: WikiPageType
+  status: WikiPageStatus
+  aliases: string[]
+  purpose: string
+  questions: string[]
+  sections: WikiSection[]
+  editSource: WikiEditSource
+  editedAt: string
+}
+
+export interface RevertWikiPageInput {
+  version: number
+  expectedVersion: number
+}
+
+export type WikiIssueType = 'contradictory-facts' | 'out-of-date' | 'mixed-entities' | 'source-missing' | 'other'
+export type WikiIssueStatus = 'open' | 'resolved'
+
+export interface WikiIssue {
+  id: string
+  pageId: string
+  pageTitle: string
+  type: WikiIssueType
+  description: string
+  status: WikiIssueStatus
+  createdAt: string
+  updatedAt: string
+}
+
+export interface CreateWikiIssueInput {
+  pageId: string
+  type: WikiIssueType
+  description: string
+}
+
+export interface UpdateWikiIssueInput {
+  status: WikiIssueStatus
+}
+
+export type WikiLintType = 'source-missing' | 'content-too-short' | 'empty-summary' | 'orphan-page' | 'dead-link'
+export type WikiLintSeverity = 'warning' | 'info'
+
+export interface WikiLintFinding {
+  id: string
+  pageId: string
+  pageTitle: string
+  type: WikiLintType
+  severity: WikiLintSeverity
+  message: string
+}
+
+export interface WikiGovernanceSnapshot {
+  openIssues: number
+  lintFindings: number
+  archivedPages: number
+}
+
 export interface UpdateDshIntegrationSettingsInput {
   enabled?: boolean
   endpoint?: string
@@ -437,6 +657,7 @@ export interface SystemSnapshot {
   version: string
   catalog: CatalogSummary
   settings: SettingsSnapshot
+  llm?: LlmIntegrationSettings
   semanticSearch: SemanticCapabilitySnapshot
   hostPlugins: PluginInventoryEntry[]
   clientBoot: ClientBootManifest
@@ -445,5 +666,7 @@ export interface SystemSnapshot {
 declare module '@deepseek-ai/cordis' {
   interface Events {
     'knowledge/graph/invalidate'(): void
+    'knowledge/document/changed'(documentIds: string[]): void
+    'knowledge/document/deleted'(documentIds: string[]): void
   }
 }

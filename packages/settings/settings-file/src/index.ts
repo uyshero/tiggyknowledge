@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from '
 import { dirname, resolve } from 'node:path'
 import { Context, Service } from '@deepseek-ai/cordis'
 import { dump, load } from 'js-yaml'
-import type { DshIntegrationAccessKeyMetadata, DshIntegrationSettings, GenerateDshIntegrationAccessKeyResult, SettingsSnapshot, UpdateDshIntegrationSettingsInput } from '@tiggyknowledge/contracts'
+import type { DshIntegrationAccessKeyMetadata, DshIntegrationSettings, GenerateDshIntegrationAccessKeyResult, LlmIntegrationSettings, SettingsSnapshot, UpdateDshIntegrationSettingsInput, UpdateLlmIntegrationSettingsInput } from '@tiggyknowledge/contracts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -27,6 +27,15 @@ const DEFAULT_SETTINGS: Record<string, unknown> = {
     tokenEnvName: 'TIGGYKNOWLEDGE_TOKEN',
     defaultKnowledgeBaseIds: [],
   } satisfies DshIntegrationSettings,
+  llmIntegration: {
+    enabled: false,
+    baseUrl: 'https://api.openai.com/v1',
+    model: '',
+    requestTimeoutMs: 60_000,
+    maxInputTokens: 100_000,
+    maxOutputTokens: 4_000,
+    apiKeyConfigured: false,
+  } satisfies LlmIntegrationSettings,
 }
 
 interface StoredDshIntegrationSettings extends DshIntegrationSettings {
@@ -70,6 +79,22 @@ export class FileSettings extends Service {
     return this.snapshot()
   }
 
+  llmIntegration(apiKeyConfigured = false, apiKeyPreview?: string): LlmIntegrationSettings {
+    const settings = normalizeLlmIntegration(this.values.llmIntegration)
+    return {
+      ...settings,
+      apiKeyConfigured,
+      ...(apiKeyPreview === undefined ? {} : { apiKeyPreview }),
+    }
+  }
+
+  updateLlmIntegration(input: UpdateLlmIntegrationSettingsInput): SettingsSnapshot {
+    const next = normalizeLlmIntegration({ ...normalizeLlmIntegration(this.values.llmIntegration), ...input })
+    this.values = { ...this.values, llmIntegration: next }
+    this.write(this.values)
+    return this.snapshot()
+  }
+
   generateDshIntegrationAccessKey(): GenerateDshIntegrationAccessKeyResult {
     const accessKey = `tk_${randomBytes(32).toString('base64url')}`
     const current = normalizeDshIntegration(this.values.dshIntegration)
@@ -108,6 +133,7 @@ export class FileSettings extends Service {
       ...structuredClone(DEFAULT_SETTINGS),
       ...values,
       dshIntegration: normalizeDshIntegration(values.dshIntegration),
+      llmIntegration: normalizeLlmIntegration(values.llmIntegration),
     }
   }
 
@@ -195,6 +221,43 @@ function hashAccessKey(accessKey: string): string {
 
 function previewAccessKey(accessKey: string): string {
   return `${accessKey.slice(0, 6)}…${accessKey.slice(-6)}`
+}
+
+function normalizeLlmIntegration(value: unknown): LlmIntegrationSettings {
+  const source = typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : {}
+  const baseUrl = normalizeLlmBaseUrl(source.baseUrl)
+  const model = typeof source.model === 'string' ? source.model.trim() : ''
+  if (model.length > 200) throw new RangeError('LLM 模型名称不能超过 200 个字符')
+  return {
+    enabled: typeof source.enabled === 'boolean' ? source.enabled : false,
+    baseUrl,
+    model,
+    requestTimeoutMs: normalizeInteger(source.requestTimeoutMs, 60_000, 5_000, 300_000, '请求超时'),
+    maxInputTokens: normalizeInteger(source.maxInputTokens, 100_000, 1_000, 2_000_000, '最大输入 Token'),
+    maxOutputTokens: normalizeInteger(source.maxOutputTokens, 4_000, 256, 100_000, '最大输出 Token'),
+    apiKeyConfigured: false,
+  }
+}
+
+function normalizeLlmBaseUrl(value: unknown): string {
+  const text = typeof value === 'string' ? value.trim().replace(/\/+$/, '') : 'https://api.openai.com/v1'
+  if (text.length === 0 || text.length > 500) throw new RangeError('LLM Base URL 长度无效')
+  let url: URL
+  try {
+    url = new URL(text)
+  } catch {
+    throw new RangeError('LLM Base URL 必须是合法 URL')
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') throw new RangeError('LLM Base URL 仅支持 http 或 https')
+  return text
+}
+
+function normalizeInteger(value: unknown, fallback: number, minimum: number, maximum: number, label: string): number {
+  const number = value === undefined ? fallback : Number(value)
+  if (!Number.isInteger(number) || number < minimum || number > maximum) {
+    throw new RangeError(`${label}必须是 ${minimum} 到 ${maximum} 之间的整数`)
+  }
+  return number
 }
 
 export default FileSettings

@@ -18,6 +18,7 @@
     { "path": "../preview-text" },
     { "path": "../query" },
     { "path": "../semantic-capabilities" },
+    { "path": "../http-router" },
     { "path": "../../settings/settings-file" },
     { "path": "../storage-manager" },
     { "path": "../client-bootstrap" },

@@ -2,6 +2,7 @@ import { Context, Service } from '@deepseek-ai/cordis'
 import type {
   CreateKnowledgeLibraryInput,
   CreateKnowledgeNoteInput,
+  CreateWikiIssueInput,
   DeleteKnowledgeLibraryResult,
   GenerateDshIntegrationAccessKeyResult,
   IngestionBatchResult,
@@ -21,9 +22,27 @@ import type {
   KnowledgeTag,
   KnowledgeMetadataDocumentList,
   OpenDataDirectoryResult,
+  RevertWikiPageInput,
   KnowledgeTagList,
+  LlmIntegrationSettings,
+  SetLlmApiKeyInput,
+  StartWikiGenerationInput,
   SystemSnapshot,
   SettingsSnapshot,
+  TestLlmConnectionResult,
+  UpdateLlmIntegrationSettingsInput,
+  UpdateWikiPageInput,
+  UpdateWikiIssueInput,
+  WikiEstimate,
+  WikiGeneration,
+  WikiFolder,
+  WikiPage,
+  WikiPageRevision,
+  WikiPageSummary,
+  WikiGovernanceSnapshot,
+  WikiIssue,
+  WikiLintFinding,
+  WikiStatus,
   UpdateDshIntegrationSettingsInput,
   UpdateKnowledgeDocumentTitleInput,
   UpdateKnowledgeMarkdownNoteInput,
@@ -65,6 +84,151 @@ export class ConnectionService extends Service {
   async generateDshIntegrationAccessKey(signal?: AbortSignal): Promise<GenerateDshIntegrationAccessKeyResult> {
     return await this.request<GenerateDshIntegrationAccessKeyResult>('/api/settings/agent-integration/access-key', {
       method: 'POST',
+      ...(signal === undefined ? {} : { signal }),
+    })
+  }
+
+  async updateLlmSettings(input: UpdateLlmIntegrationSettingsInput, signal?: AbortSignal): Promise<LlmIntegrationSettings> {
+    return await this.request<LlmIntegrationSettings>('/api/settings/llm', {
+      body: JSON.stringify(input),
+      headers: { 'content-type': 'application/json' },
+      method: 'PUT',
+      ...(signal === undefined ? {} : { signal }),
+    })
+  }
+
+  async setLlmApiKey(input: SetLlmApiKeyInput, signal?: AbortSignal): Promise<LlmIntegrationSettings> {
+    return await this.request<LlmIntegrationSettings>('/api/settings/llm/api-key', {
+      body: JSON.stringify(input),
+      headers: { 'content-type': 'application/json' },
+      method: 'PUT',
+      ...(signal === undefined ? {} : { signal }),
+    })
+  }
+
+  async testLlmConnection(signal?: AbortSignal): Promise<TestLlmConnectionResult> {
+    return await this.request<TestLlmConnectionResult>('/api/settings/llm/test', {
+      method: 'POST',
+      ...(signal === undefined ? {} : { signal }),
+    })
+  }
+
+  async wikiStatus(signal?: AbortSignal): Promise<WikiStatus> {
+    return await this.request<WikiStatus>('/api/wiki/status', signal === undefined ? {} : { signal })
+  }
+
+  async wikiEstimate(mode: StartWikiGenerationInput['mode'], signal?: AbortSignal): Promise<WikiEstimate> {
+    return await this.request<WikiEstimate>('/api/wiki/estimate', {
+      body: JSON.stringify({ mode }),
+      headers: { 'content-type': 'application/json' },
+      method: 'POST',
+      ...(signal === undefined ? {} : { signal }),
+    })
+  }
+
+  async startWikiGeneration(input: StartWikiGenerationInput, signal?: AbortSignal): Promise<WikiGeneration> {
+    return await this.request<WikiGeneration>('/api/wiki/generations', {
+      body: JSON.stringify(input),
+      headers: { 'content-type': 'application/json' },
+      method: 'POST',
+      ...(signal === undefined ? {} : { signal }),
+    })
+  }
+
+  async wikiGeneration(id: string, signal?: AbortSignal): Promise<WikiGeneration> {
+    return await this.request<WikiGeneration>(`/api/wiki/generations/${encodeURIComponent(id)}`, signal === undefined ? {} : { signal })
+  }
+
+  async cancelWikiGeneration(id: string, signal?: AbortSignal): Promise<WikiGeneration> {
+    return await this.request<WikiGeneration>(`/api/wiki/generations/${encodeURIComponent(id)}/cancel`, {
+      method: 'POST',
+      ...(signal === undefined ? {} : { signal }),
+    })
+  }
+
+  async wikiPages(signal?: AbortSignal): Promise<WikiPageSummary[]> {
+    return await this.request<WikiPageSummary[]>('/api/wiki/pages', signal === undefined ? {} : { signal })
+  }
+
+  async wikiFolders(signal?: AbortSignal): Promise<WikiFolder[]> {
+    return await this.request<WikiFolder[]>('/api/wiki/folders', signal === undefined ? {} : { signal })
+  }
+
+  async wikiPage(id: string, signal?: AbortSignal): Promise<WikiPage> {
+    return await this.request<WikiPage>(`/api/wiki/pages/${encodeURIComponent(id)}`, signal === undefined ? {} : { signal })
+  }
+
+  async updateWikiPage(id: string, input: UpdateWikiPageInput, signal?: AbortSignal): Promise<WikiPage> {
+    return await this.request<WikiPage>(`/api/wiki/pages/${encodeURIComponent(id)}`, {
+      body: JSON.stringify(input),
+      headers: { 'content-type': 'application/json' },
+      method: 'PUT',
+      ...(signal === undefined ? {} : { signal }),
+    })
+  }
+
+  async wikiPageRevisions(id: string, signal?: AbortSignal): Promise<WikiPageRevision[]> {
+    return await this.request<WikiPageRevision[]>(
+      `/api/wiki/pages/${encodeURIComponent(id)}/revisions`,
+      signal === undefined ? {} : { signal },
+    )
+  }
+
+  async revertWikiPage(id: string, input: RevertWikiPageInput, signal?: AbortSignal): Promise<WikiPage> {
+    return await this.request<WikiPage>(`/api/wiki/pages/${encodeURIComponent(id)}/revert`, {
+      body: JSON.stringify(input),
+      headers: { 'content-type': 'application/json' },
+      method: 'POST',
+      ...(signal === undefined ? {} : { signal }),
+    })
+  }
+
+  async wikiGovernance(signal?: AbortSignal): Promise<WikiGovernanceSnapshot> {
+    return await this.request<WikiGovernanceSnapshot>('/api/wiki/governance', signal === undefined ? {} : { signal })
+  }
+
+  async wikiLint(signal?: AbortSignal): Promise<WikiLintFinding[]> {
+    return await this.request<WikiLintFinding[]>('/api/wiki/governance/lint', signal === undefined ? {} : { signal })
+  }
+
+  async wikiIssues(signal?: AbortSignal): Promise<WikiIssue[]> {
+    return await this.request<WikiIssue[]>('/api/wiki/governance/issues', signal === undefined ? {} : { signal })
+  }
+
+  async createWikiIssue(input: CreateWikiIssueInput, signal?: AbortSignal): Promise<WikiIssue> {
+    return await this.request<WikiIssue>('/api/wiki/governance/issues', {
+      body: JSON.stringify(input),
+      headers: { 'content-type': 'application/json' },
+      method: 'POST',
+      ...(signal === undefined ? {} : { signal }),
+    })
+  }
+
+  async updateWikiIssue(id: string, input: UpdateWikiIssueInput, signal?: AbortSignal): Promise<WikiIssue> {
+    return await this.request<WikiIssue>(`/api/wiki/governance/issues/${encodeURIComponent(id)}`, {
+      body: JSON.stringify(input),
+      headers: { 'content-type': 'application/json' },
+      method: 'PUT',
+      ...(signal === undefined ? {} : { signal }),
+    })
+  }
+
+  async wikiTrash(signal?: AbortSignal): Promise<WikiPageSummary[]> {
+    return await this.request<WikiPageSummary[]>('/api/wiki/governance/trash', signal === undefined ? {} : { signal })
+  }
+
+  async restoreWikiPage(id: string, expectedVersion: number, signal?: AbortSignal): Promise<WikiPage> {
+    return await this.request<WikiPage>(`/api/wiki/governance/trash/${encodeURIComponent(id)}/restore`, {
+      body: JSON.stringify({ expectedVersion }),
+      headers: { 'content-type': 'application/json' },
+      method: 'POST',
+      ...(signal === undefined ? {} : { signal }),
+    })
+  }
+
+  async purgeWikiPage(id: string, signal?: AbortSignal): Promise<{ ok: true }> {
+    return await this.request<{ ok: true }>(`/api/wiki/governance/trash/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
       ...(signal === undefined ? {} : { signal }),
     })
   }
