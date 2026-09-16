@@ -161,6 +161,10 @@ describe('LLM Wiki generation', () => {
       })
 
       const generation = ctx.llmWiki.start({ mode: 'initial' })
+      await vi.waitFor(() => expect(ctx.llmWiki.generation(generation.id).state).toBe('planned'))
+      const plan = ctx.llmWiki.generation(generation.id).plan
+      expect(plan).toMatchObject({ candidates: [{ title: '测试总览', action: 'create' }] })
+      ctx.llmWiki.confirm(generation.id, { candidateSlugs: plan?.candidates.map(candidate => candidate.slug) ?? [] })
       await vi.waitFor(() => expect(ctx.llmWiki.generation(generation.id).state).toBe('completed'))
       expect(ctx.llmWiki.generation(generation.id)).toMatchObject({
         completedSteps: 3,
@@ -306,8 +310,17 @@ describe('LLM Wiki generation', () => {
       }
       const documentA = createDocument('Alpha', 'Alpha 初始内容')
       createDocument('Beta', 'Beta 不相关内容')
+      const approve = async (generationId: string, approveArchive = false): Promise<void> => {
+        await vi.waitFor(() => expect(ctx.llmWiki.generation(generationId).state).toBe('planned'))
+        const plan = ctx.llmWiki.generation(generationId).plan
+        ctx.llmWiki.confirm(generationId, {
+          candidateSlugs: plan?.candidates.map(candidate => candidate.slug) ?? [],
+          ...(approveArchive ? { archiveSlugs: plan?.archivePages.map(page => page.slug) ?? [] } : {}),
+        })
+        await vi.waitFor(() => expect(ctx.llmWiki.generation(generationId).state).toBe('completed'))
+      }
       const initial = ctx.llmWiki.start({ mode: 'initial' })
-      await vi.waitFor(() => expect(ctx.llmWiki.generation(initial.id).state).toBe('completed'))
+      await approve(initial.id)
       const betaBefore = ctx.llmWiki.page('entity/beta')
       const alphaBefore = ctx.llmWiki.page('entity/alpha')
 
@@ -319,7 +332,13 @@ describe('LLM Wiki generation', () => {
         sizeBytes: replacement.sizeBytes,
       })
       const incremental = ctx.llmWiki.start({ mode: 'incremental' })
-      await vi.waitFor(() => expect(ctx.llmWiki.generation(incremental.id).state).toBe('completed'))
+      await vi.waitFor(() => expect(ctx.llmWiki.generation(incremental.id).state).toBe('planned'))
+      expect(ctx.llmWiki.status().changes.updated).toBe(1)
+      expect(ctx.llmWiki.page('entity/alpha')).toMatchObject({
+        version: alphaBefore.version,
+        sections: [{ body: alphaBefore.sections[0]?.body }],
+      })
+      await approve(incremental.id)
       const betaAfter = ctx.llmWiki.page('entity/beta')
       const alphaAfter = ctx.llmWiki.page('entity/alpha')
       expect(betaAfter).toMatchObject({
@@ -335,7 +354,7 @@ describe('LLM Wiki generation', () => {
 
       omitBetaCandidate = true
       const rebuild = ctx.llmWiki.start({ mode: 'rebuild' })
-      await vi.waitFor(() => expect(ctx.llmWiki.generation(rebuild.id).state).toBe('completed'))
+      await approve(rebuild.id)
       expect(ctx.llmWiki.pages().some(page => page.slug === 'entity/beta')).toBe(true)
       expect(ctx.llmWiki.page('entity/beta')).toMatchObject({
         version: betaBefore.version,
@@ -345,7 +364,7 @@ describe('LLM Wiki generation', () => {
       const callsBeforeDeletion = complete.mock.calls.length
       ctx.knowledgeCatalog.deleteDocuments([documentA.id])
       const deletion = ctx.llmWiki.start({ mode: 'incremental' })
-      await vi.waitFor(() => expect(ctx.llmWiki.generation(deletion.id).state).toBe('completed'))
+      await approve(deletion.id, true)
       expect(ctx.llmWiki.pages().some(page => page.slug === 'entity/alpha')).toBe(false)
       expect(ctx.llmWiki.page('entity/alpha').status).toBe('archived')
       expect(ctx.llmWiki.page('entity/beta')).toMatchObject({

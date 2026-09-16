@@ -1,5 +1,6 @@
 import { Context, Service } from '@deepseek-ai/cordis'
 import type {
+  ConfirmWikiGenerationInput,
   CreateKnowledgeLibraryInput,
   CreateKnowledgeNoteInput,
   CreateWikiIssueInput,
@@ -137,6 +138,15 @@ export class ConnectionService extends Service {
 
   async wikiGeneration(id: string, signal?: AbortSignal): Promise<WikiGeneration> {
     return await this.request<WikiGeneration>(`/api/wiki/generations/${encodeURIComponent(id)}`, signal === undefined ? {} : { signal })
+  }
+
+  async confirmWikiGeneration(id: string, input: ConfirmWikiGenerationInput, signal?: AbortSignal): Promise<WikiGeneration> {
+    return await this.request<WikiGeneration>(`/api/wiki/generations/${encodeURIComponent(id)}/confirm`, {
+      body: JSON.stringify(input),
+      headers: { 'content-type': 'application/json' },
+      method: 'POST',
+      ...(signal === undefined ? {} : { signal }),
+    })
   }
 
   async cancelWikiGeneration(id: string, signal?: AbortSignal): Promise<WikiGeneration> {

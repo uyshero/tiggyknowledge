@@ -1,5 +1,6 @@
 import { Context, Service } from '@deepseek-ai/cordis'
 import type {
+  ConfirmWikiGenerationInput,
   LlmIntegrationSettings,
   RevertWikiPageInput,
   SetLlmApiKeyInput,
@@ -132,6 +133,21 @@ const ROUTES: Route[] = [
         json(this.ctx.llmWiki.generation(decodeURIComponent(match?.[1] ?? '')))
       } catch (error) {
         if (error instanceof RangeError) throw new HttpError(404, 'wiki_generation_not_found', error.message)
+        throw error
+      }
+    },
+  },
+  {
+    id: 'wiki:confirm-generation',
+    methods: ['POST'],
+    path: /^\/api\/wiki\/generations\/([^/]+)\/confirm$/,
+    async handler({ assertSameOrigin, json, match, readJson }) {
+      assertSameOrigin()
+      const input = await readJson<ConfirmWikiGenerationInput>()
+      try {
+        json(this.ctx.llmWiki.confirm(decodeURIComponent(match?.[1] ?? ''), input), 202)
+      } catch (error) {
+        if (error instanceof RangeError) throw new HttpError(409, 'wiki_generation_confirmation_rejected', error.message)
         throw error
       }
     },

@@ -12,6 +12,27 @@
 .wiki-empty p, .wiki-generation p { max-width: 480px; margin: 0 0 19px; color: #747b76; font-size: 13px; line-height: 1.6; }
 .wiki-generation { min-height: 390px; }
 .wiki-generation h2 { margin-top: 14px; }
+.wiki-plan { display: flex; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; border: 1px solid #dfe5e1; border-radius: 10px; background: white; }
+.wiki-plan > header, .wiki-plan > footer { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px 20px; border-bottom: 1px solid #e7ebe8; }
+.wiki-plan > header h2 { margin: 2px 0 0; font-size: 20px; }
+.wiki-plan > header > span { color: #567261; font-size: 12px; }
+.wiki-plan > footer { justify-content: flex-end; border-top: 1px solid #e7ebe8; border-bottom: 0; }
+.wiki-plan-summary { display: grid; grid-template-columns: repeat(3, 1fr); border-bottom: 1px solid #e7ebe8; background: #f8faf9; }
+.wiki-plan-summary div { display: flex; flex-direction: column; gap: 4px; padding: 14px 20px; border-right: 1px solid #e7ebe8; }
+.wiki-plan-summary div:last-child { border-right: 0; }
+.wiki-plan-summary strong { font-size: 20px; }
+.wiki-plan-summary span { color: #78817b; font-size: 11px; }
+.wiki-plan-list { display: grid; flex: 1; gap: 9px; overflow: auto; padding: 16px 20px; }
+.wiki-plan-item { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 11px; padding: 14px; border: 1px solid #e0e5e2; border-radius: 8px; background: #fafbfa; cursor: pointer; }
+.wiki-plan-item.selected { border-color: #aebfb5; background: #f3f7f4; }
+.wiki-plan-item input { margin-top: 3px; }
+.wiki-plan-item p { margin: 7px 0; color: #59645d; line-height: 1.55; }
+.wiki-plan-item small { display: block; margin-top: 4px; color: #808983; }
+.wiki-plan-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.wiki-plan-title span { color: #496052; font-size: 11px; white-space: nowrap; }
+.wiki-plan-archive { padding: 14px 20px; border-top: 1px solid #eadfda; background: #fff9f6; }
+.wiki-plan-archive h3, .wiki-plan-archive p { margin: 0 0 7px; }
+.wiki-plan-archive label { display: inline-flex; align-items: center; gap: 6px; margin: 5px 18px 0 0; }
 .wiki-spin { color: #646b67; animation: wiki-spin 1.2s linear infinite; }
 @keyframes wiki-spin { to { transform: rotate(360deg); } }
 .wiki-progress { width: min(460px, 80vw); height: 7px; overflow: hidden; border-radius: 999px; background: #e6e9e7; }

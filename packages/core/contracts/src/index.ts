@@ -358,8 +358,8 @@ export interface TestLlmConnectionResult {
 }
 
 export type WikiGenerationMode = 'initial' | 'incremental' | 'rebuild'
-export type WikiGenerationState = 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
-export type WikiState = 'never-generated' | 'ready' | 'stale' | 'generating' | 'failed'
+export type WikiGenerationState = 'pending' | 'running' | 'planned' | 'completed' | 'failed' | 'cancelled'
+export type WikiState = 'never-generated' | 'ready' | 'stale' | 'generating' | 'awaiting-confirmation' | 'failed'
 export type WikiSectionState = 'ready' | 'stale' | 'source-missing' | 'locked'
 export type WikiPageType =
   | 'summary'
@@ -464,13 +464,48 @@ export interface WikiGeneration {
   outputTokens: number
   candidateCount?: number
   acceptedCandidateCount?: number
+  plan?: WikiGenerationPlan
   createdAt: string
   completedAt?: string
   error?: string
 }
 
+export type WikiCandidateAction = 'create' | 'update' | 'restore'
+
+export interface WikiGenerationCandidate {
+  title: string
+  slug: string
+  pageType: WikiPageType
+  aliases: string[]
+  purpose: string
+  questions: string[]
+  folderPath: string[]
+  sourceDocumentIds: string[]
+  sourceTitles: string[]
+  factCount: number
+  referencePotential: number
+  stableIdentity: boolean
+  transient: boolean
+  estimatedCharacters: number
+  score: number
+  reasons: string[]
+  action: WikiCandidateAction
+}
+
+export interface WikiGenerationPlan {
+  documentFingerprint: string
+  candidates: WikiGenerationCandidate[]
+  archivePages: Array<Pick<WikiPageSummary, 'id' | 'slug' | 'title' | 'pageType' | 'purpose'>>
+  preservedPageCount: number
+}
+
 export interface StartWikiGenerationInput {
   mode: WikiGenerationMode
+}
+
+export interface ConfirmWikiGenerationInput {
+  candidateSlugs: string[]
+  archiveSlugs?: string[]
 }
 
 export interface UpdateWikiPageInput {

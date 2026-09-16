@@ -120,6 +120,7 @@ interface GenerationRow {
   output_tokens: number
   candidate_count: number | null
   accepted_candidate_count: number | null
+  plan_json: string | null
   created_at: string
   completed_at: string | null
   error: string | null
@@ -140,7 +141,7 @@ interface RevisionRow {
   edited_at: string
 }
 
-const SCHEMA_VERSION = 6
+const SCHEMA_VERSION = 8
 
 export class WikiSqlite extends Service {
   private database: DatabaseSync | undefined
@@ -168,6 +169,13 @@ export class WikiSqlite extends Service {
         content_hash TEXT NOT NULL,
         summary TEXT,
         summarized_at TEXT
+      );
+      CREATE TABLE IF NOT EXISTS wiki_document_summary_cache (
+        document_id TEXT NOT NULL,
+        content_hash TEXT NOT NULL,
+        summary TEXT NOT NULL,
+        summarized_at TEXT NOT NULL,
+        PRIMARY KEY(document_id, content_hash)
       );
       CREATE TABLE IF NOT EXISTS wiki_folders (
         id TEXT PRIMARY KEY,
@@ -232,6 +240,7 @@ export class WikiSqlite extends Service {
         output_tokens INTEGER NOT NULL DEFAULT 0,
         candidate_count INTEGER,
         accepted_candidate_count INTEGER,
+        plan_json TEXT,
         created_at TEXT NOT NULL,
         completed_at TEXT,
         error TEXT
@@ -271,6 +280,7 @@ export class WikiSqlite extends Service {
     const generationColumns = new Set((database.prepare('PRAGMA table_info(wiki_generations)').all() as { name: string }[]).map(column => column.name))
     if (!generationColumns.has('candidate_count')) database.exec('ALTER TABLE wiki_generations ADD COLUMN candidate_count INTEGER')
     if (!generationColumns.has('accepted_candidate_count')) database.exec('ALTER TABLE wiki_generations ADD COLUMN accepted_candidate_count INTEGER')
+    if (!generationColumns.has('plan_json')) database.exec('ALTER TABLE wiki_generations ADD COLUMN plan_json TEXT')
     const revisionColumns = new Set((database.prepare('PRAGMA table_info(wiki_page_revisions)').all() as { name: string }[]).map(column => column.name))
     if (!revisionColumns.has('purpose')) database.exec("ALTER TABLE wiki_page_revisions ADD COLUMN purpose TEXT NOT NULL DEFAULT ''")
     if (!revisionColumns.has('questions_json')) database.exec("ALTER TABLE wiki_page_revisions ADD COLUMN questions_json TEXT NOT NULL DEFAULT '[]'")
@@ -317,7 +327,13 @@ export class WikiSqlite extends Service {
   }
 
   cachedSummary(documentId: string, contentHash: string): string | undefined {
-    const row = this.requireDatabase().prepare(`
+    const database = this.requireDatabase()
+    const cached = database.prepare(`
+      SELECT summary FROM wiki_document_summary_cache
+      WHERE document_id = ? AND content_hash = ?
+    `).get(documentId, contentHash) as { summary: string } | undefined
+    if (cached !== undefined) return cached.summary
+    const row = database.prepare(`
       SELECT summary FROM wiki_document_snapshots
       WHERE document_id = ? AND content_hash = ? AND summary IS NOT NULL
     `).get(documentId, contentHash) as { summary: string } | undefined
@@ -326,13 +342,11 @@ export class WikiSqlite extends Service {
 
   saveDocumentSummary(snapshot: WikiDocumentSnapshot, summary: string): void {
     this.requireDatabase().prepare(`
-      INSERT INTO wiki_document_snapshots(document_id, library_id, title, content_hash, summary, summarized_at)
-      VALUES (?, ?, ?, ?, ?, ?)
-      ON CONFLICT(document_id) DO UPDATE SET
-        library_id = excluded.library_id, title = excluded.title,
-        content_hash = excluded.content_hash, summary = excluded.summary,
-        summarized_at = excluded.summarized_at
-    `).run(snapshot.documentId, snapshot.libraryId, snapshot.title, snapshot.contentHash, summary, new Date().toISOString())
+      INSERT INTO wiki_document_summary_cache(document_id, content_hash, summary, summarized_at)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(document_id, content_hash) DO UPDATE SET
+        summary = excluded.summary, summarized_at = excluded.summarized_at
+    `).run(snapshot.documentId, snapshot.contentHash, summary, new Date().toISOString())
   }
 
   syncDocumentSnapshots(snapshots: WikiDocumentSnapshot[]): void {
@@ -689,13 +703,14 @@ export class WikiSqlite extends Service {
     this.requireDatabase().prepare(`
       INSERT INTO wiki_generations(
         id, mode, state, phase, total_steps, completed_steps, estimated_input_tokens,
-        input_tokens, output_tokens, candidate_count, accepted_candidate_count, created_at, completed_at, error
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        input_tokens, output_tokens, candidate_count, accepted_candidate_count, plan_json, created_at, completed_at, error
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       generation.id, generation.mode, generation.state, generation.phase,
       generation.totalSteps, generation.completedSteps, generation.estimatedInputTokens,
       generation.inputTokens, generation.outputTokens, generation.candidateCount ?? null,
-      generation.acceptedCandidateCount ?? null, generation.createdAt,
+      generation.acceptedCandidateCount ?? null, generation.plan === undefined ? null : JSON.stringify(generation.plan),
+      generation.createdAt,
       generation.completedAt ?? null, generation.error ?? null,
     )
   }
@@ -707,12 +722,13 @@ export class WikiSqlite extends Service {
     this.requireDatabase().prepare(`
       UPDATE wiki_generations SET state = ?, phase = ?, total_steps = ?, completed_steps = ?,
         estimated_input_tokens = ?, input_tokens = ?, output_tokens = ?, candidate_count = ?,
-        accepted_candidate_count = ?, completed_at = ?, error = ?
+        accepted_candidate_count = ?, plan_json = ?, completed_at = ?, error = ?
       WHERE id = ?
     `).run(
       next.state, next.phase, next.totalSteps, next.completedSteps, next.estimatedInputTokens,
       next.inputTokens, next.outputTokens, next.candidateCount ?? null,
-      next.acceptedCandidateCount ?? null, next.completedAt ?? null, next.error ?? null, id,
+      next.acceptedCandidateCount ?? null, next.plan === undefined ? null : JSON.stringify(next.plan),
+      next.completedAt ?? null, next.error ?? null, id,
     )
     return next
   }
@@ -731,7 +747,7 @@ export class WikiSqlite extends Service {
 
   activeGeneration(): WikiGeneration | undefined {
     const row = this.requireDatabase().prepare(`
-      SELECT * FROM wiki_generations WHERE state IN ('pending', 'running')
+      SELECT * FROM wiki_generations WHERE state IN ('pending', 'running', 'planned')
       ORDER BY created_at DESC LIMIT 1
     `).get() as unknown as GenerationRow | undefined
     return row === undefined ? undefined : normalizeGeneration(row)
@@ -913,6 +929,7 @@ function normalizeGeneration(row: GenerationRow): WikiGeneration {
     outputTokens: row.output_tokens,
     ...(row.candidate_count === null ? {} : { candidateCount: row.candidate_count }),
     ...(row.accepted_candidate_count === null ? {} : { acceptedCandidateCount: row.accepted_candidate_count }),
+    ...(row.plan_json === null ? {} : { plan: JSON.parse(row.plan_json) as NonNullable<WikiGeneration['plan']> }),
     createdAt: row.created_at,
     ...(row.completed_at === null ? {} : { completedAt: row.completed_at }),
     ...(row.error === null ? {} : { error: row.error }),

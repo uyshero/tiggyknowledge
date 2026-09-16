@@ -227,6 +227,9 @@ export function apply(ctx: Context): void {
     const [estimating, setEstimating] = useState<WikiGenerationMode>()
     const [starting, setStarting] = useState(false)
     const [cancelling, setCancelling] = useState(false)
+    const [confirmingPlan, setConfirmingPlan] = useState(false)
+    const [selectedCandidateSlugs, setSelectedCandidateSlugs] = useState<string[]>([])
+    const [selectedArchiveSlugs, setSelectedArchiveSlugs] = useState<string[]>([])
     const [editing, setEditing] = useState(false)
     const [editTitle, setEditTitle] = useState('')
     const [editSummary, setEditSummary] = useState('')
@@ -335,6 +338,12 @@ export function apply(ctx: Context): void {
       }
     }, [generation, loadWorkspace])
 
+    useEffect(() => {
+      if (generation?.state !== 'planned' || generation.plan === undefined) return
+      setSelectedCandidateSlugs(generation.plan.candidates.map(candidate => candidate.slug))
+      setSelectedArchiveSlugs([])
+    }, [generation?.id, generation?.state])
+
     const requestGeneration = async (mode: WikiGenerationMode): Promise<void> => {
       if (estimating !== undefined) return
       setEstimating(mode)
@@ -377,6 +386,22 @@ export function apply(ctx: Context): void {
         setError(errorMessage(reason, '无法取消 Wiki 生成'))
       } finally {
         setCancelling(false)
+      }
+    }
+
+    const confirmPlan = async (): Promise<void> => {
+      if (generation?.state !== 'planned' || confirmingPlan) return
+      setConfirmingPlan(true)
+      setError(undefined)
+      try {
+        setGeneration(await ctx.connection.confirmWikiGeneration(generation.id, {
+          candidateSlugs: selectedCandidateSlugs,
+          archiveSlugs: selectedArchiveSlugs,
+        }))
+      } catch (reason) {
+        setError(errorMessage(reason, '无法确认 Wiki 生成计划'))
+      } finally {
+        setConfirmingPlan(false)
       }
     }
 
@@ -470,6 +495,7 @@ export function apply(ctx: Context): void {
       : Math.min(100, Math.round(generation.completedSteps / generation.totalSteps * 100))
     const generated = (status?.pageCount ?? 0) > 0
     const generating = generation !== undefined && ACTIVE_GENERATION_STATES.has(generation.state)
+    const planningReady = generation?.state === 'planned' && generation.plan !== undefined
 
     return (
       <div className="page wiki-page">
@@ -477,8 +503,8 @@ export function apply(ctx: Context): void {
           <div><p className="eyebrow">AI 知识整理</p><h1>Wiki</h1></div>
           {generated && (
             <div className="header-actions">
-              <button className="secondary-button" type="button" disabled={generating || estimating !== undefined} onClick={() => void requestGeneration('incremental')}><RefreshCw size={16} />{estimating === 'incremental' ? '估算中...' : '更新 Wiki'}</button>
-              <button className="secondary-button" type="button" disabled={generating || estimating !== undefined} onClick={() => void requestGeneration('rebuild')}><RotateCcw size={16} />{estimating === 'rebuild' ? '估算中...' : '完整重建'}</button>
+              <button className="secondary-button" type="button" disabled={generating || planningReady || estimating !== undefined} onClick={() => void requestGeneration('incremental')}><RefreshCw size={16} />{estimating === 'incremental' ? '估算中...' : '更新 Wiki'}</button>
+              <button className="secondary-button" type="button" disabled={generating || planningReady || estimating !== undefined} onClick={() => void requestGeneration('rebuild')}><RotateCcw size={16} />{estimating === 'rebuild' ? '估算中...' : '完整重建'}</button>
             </div>
           )}
         </header>
@@ -502,7 +528,7 @@ export function apply(ctx: Context): void {
             <p>生成 Wiki 需要可用的模型地址、模型名称和 API Key。配置完成后返回此处开始生成。</p>
             <button className="primary-button" type="button" onClick={() => ctx.clientApp.selectPage('settings', { panelId: 'llm' })}><Settings size={16} />前往 AI 模型设置</button>
           </section>
-        ) : !generated && !generating ? (
+        ) : !generated && !generating && !planningReady ? (
           <section className="wiki-empty">
             <div className="wiki-empty-icon"><Library size={23} /></div>
             <h2>还没有生成 Wiki</h2>
@@ -518,6 +544,48 @@ export function apply(ctx: Context): void {
             <div className="wiki-progress-meta"><span>{generation.completedSteps} / {generation.totalSteps} 步</span><span>{progress}%</span></div>
             {generation.candidateCount !== undefined && <div className="wiki-progress-meta"><span>候选 {generation.candidateCount} 个</span><span>通过 {generation.acceptedCandidateCount ?? 0} 个</span></div>}
             <button className="secondary-button" type="button" disabled={cancelling} onClick={() => void cancelGeneration()}><Square size={14} />{cancelling ? '正在取消...' : '取消生成'}</button>
+          </section>
+        ) : generation?.state === 'planned' && generation.plan !== undefined ? (
+          <section className="wiki-plan">
+            <header>
+              <div><p className="eyebrow">写入前预览</p><h2>确认 Wiki 生成计划</h2></div>
+              <span>现有 Wiki 尚未修改</span>
+            </header>
+            <div className="wiki-plan-summary">
+              <div><strong>{generation.plan.candidates.length}</strong><span>通过准入的候选</span></div>
+              <div><strong>{generation.plan.preservedPageCount}</strong><span>原样保留词条</span></div>
+              <div><strong>{generation.plan.archivePages.length}</strong><span>建议归档</span></div>
+            </div>
+            <div className="wiki-plan-list">
+              {generation.plan.candidates.map(candidate => {
+                const selected = selectedCandidateSlugs.includes(candidate.slug)
+                return (
+                  <label className={`wiki-plan-item ${selected ? 'selected' : ''}`} key={candidate.slug}>
+                    <input type="checkbox" checked={selected} onChange={() => setSelectedCandidateSlugs(items => selected ? items.filter(slug => slug !== candidate.slug) : [...items, candidate.slug])} />
+                    <div>
+                      <div className="wiki-plan-title"><strong>{candidate.title}</strong><span>{candidate.action === 'create' ? '新增' : candidate.action === 'restore' ? '恢复' : '更新'} · {pageTypeLabel(candidate.pageType)} · {candidate.score} 分</span></div>
+                      <p>{candidate.purpose}</p>
+                      {candidate.reasons.length > 0 && <small>{candidate.reasons.join('；')}</small>}
+                      <small>来源：{candidate.sourceTitles.join('、') || '未知来源'}</small>
+                    </div>
+                  </label>
+                )
+              })}
+            </div>
+            {generation.plan.archivePages.length > 0 && (
+              <div className="wiki-plan-archive">
+                <h3>建议归档（默认不执行）</h3>
+                <p>仅勾选你确认不再需要的词条。</p>
+                {generation.plan.archivePages.map(candidate => {
+                  const selected = selectedArchiveSlugs.includes(candidate.slug)
+                  return <label key={candidate.slug}><input type="checkbox" checked={selected} onChange={() => setSelectedArchiveSlugs(items => selected ? items.filter(slug => slug !== candidate.slug) : [...items, candidate.slug])} /><span>{candidate.title}</span></label>
+                })}
+              </div>
+            )}
+            <footer>
+              <button className="secondary-button" type="button" disabled={cancelling || confirmingPlan} onClick={() => void cancelGeneration()}>{cancelling ? '取消中...' : '放弃本次计划'}</button>
+              <button className="primary-button" type="button" disabled={confirmingPlan} onClick={() => void confirmPlan()}>{confirmingPlan ? '正在启动...' : `确认生成 ${selectedCandidateSlugs.length} 个词条`}</button>
+            </footer>
           </section>
         ) : generation?.state === 'failed' && !generated ? (
           <section className="wiki-empty"><h2>生成失败</h2><p>{generation.error ?? '生成任务未能完成，请重试。'}</p><button className="primary-button" type="button" onClick={() => void requestGeneration('initial')}>重新生成</button></section>

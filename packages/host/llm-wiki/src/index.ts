@@ -3,6 +3,7 @@ import { Context, Service } from '@deepseek-ai/cordis'
 import type {} from '@tiggyknowledge/catalog-sqlite'
 import type {
   KnowledgeDocument,
+  ConfirmWikiGenerationInput,
   LlmIntegrationSettings,
   StartWikiGenerationInput,
   UpdateWikiPageInput,
@@ -10,6 +11,8 @@ import type {
   WikiEstimate,
   WikiFolder,
   WikiGeneration,
+  WikiGenerationCandidate,
+  WikiGenerationPlan,
   WikiGenerationMode,
   WikiPage,
   WikiPageRevision,
@@ -117,7 +120,7 @@ export class LlmWiki extends Service {
 
   async *[Service.init](): AsyncGenerator<() => void> {
     const interrupted = this.ctx.wikiStorage.activeGeneration()
-    if (interrupted !== undefined) {
+    if (interrupted !== undefined && interrupted.state !== 'planned') {
       this.ctx.wikiStorage.updateGeneration(interrupted.id, {
         state: 'failed',
         phase: 'failed',
@@ -143,7 +146,8 @@ export class LlmWiki extends Service {
     const credentials = this.ctx.llmCredentials.snapshot()
     const settings = this.settings(credentials.configured, credentials.preview)
     let state: WikiStatus['state']
-    if (active !== undefined) state = 'generating'
+    if (active?.state === 'planned') state = 'awaiting-confirmation'
+    else if (active !== undefined) state = 'generating'
     else if (latest?.state === 'failed') state = 'failed'
     else if (pageCount === 0) state = 'never-generated'
     else if (changes.added + changes.updated + changes.deleted > 0) state = 'stale'
@@ -216,13 +220,45 @@ export class LlmWiki extends Service {
   cancel(id: string): WikiGeneration {
     const generation = this.ctx.wikiStorage.getGeneration(id)
     if (generation === undefined) throw new RangeError('Wiki 生成任务不存在')
-    if (generation.state !== 'pending' && generation.state !== 'running') return generation
+    if (generation.state !== 'pending' && generation.state !== 'running' && generation.state !== 'planned') return generation
     this.activeController?.abort()
     return this.ctx.wikiStorage.updateGeneration(id, {
       state: 'cancelled',
       phase: 'cancelled',
       completedAt: new Date().toISOString(),
     })
+  }
+
+  confirm(id: string, input: ConfirmWikiGenerationInput): WikiGeneration {
+    const generation = this.ctx.wikiStorage.getGeneration(id)
+    if (generation === undefined) throw new RangeError('Wiki 生成任务不存在')
+    if (generation.state !== 'planned' || generation.plan === undefined) throw new RangeError('Wiki 生成任务尚未等待确认')
+    if (this.activeController !== undefined) throw new RangeError('已有 Wiki 生成任务正在运行')
+    if (!Array.isArray(input.candidateSlugs) || !Array.isArray(input.archiveSlugs ?? [])) {
+      throw new RangeError('Wiki 生成确认参数无效')
+    }
+    if (generation.plan.documentFingerprint !== documentFingerprint(this.collectChanges().current)) {
+      throw new RangeError('知识文档在规划后发生变化，请重新生成预览')
+    }
+    const selected = new Set(input.candidateSlugs)
+    const archiveSlugs = new Set(input.archiveSlugs ?? [])
+    const candidates = generation.plan.candidates.filter(candidate => selected.has(candidate.slug))
+    const validCandidateSlugs = new Set(generation.plan.candidates.map(candidate => candidate.slug))
+    const validArchiveSlugs = new Set(generation.plan.archivePages.map(page => page.slug))
+    if ([...selected].some(slug => !validCandidateSlugs.has(slug))
+      || [...archiveSlugs].some(slug => !validArchiveSlugs.has(slug))) {
+      throw new RangeError('Wiki 生成确认包含未知词条')
+    }
+    const settings = this.currentSettings()
+    const controller = this.activeController = new AbortController()
+    const next = this.ctx.wikiStorage.updateGeneration(id, { state: 'pending', phase: 'confirmed' })
+    void this.runGeneration(id, settings, controller, {
+      candidates: candidates.map(candidate => ({ ...candidate })),
+      archiveSlugs,
+    }).finally(() => {
+      if (this.activeController === controller) this.activeController = undefined
+    })
+    return next
   }
 
   pages(): WikiPageSummary[] {
@@ -295,14 +331,47 @@ export class LlmWiki extends Service {
     return this.ctx.wikiStorage.pagesForDocument(documentId)
   }
 
-  private async runGeneration(id: string, settings: LlmIntegrationSettings, controller: AbortController): Promise<void> {
+  private async runGeneration(
+    id: string,
+    settings: LlmIntegrationSettings,
+    controller: AbortController,
+    confirmed?: { candidates: EntryCandidate[], archiveSlugs: Set<string> },
+  ): Promise<void> {
     try {
       let generation = this.ctx.wikiStorage.updateGeneration(id, { state: 'running', phase: 'scanning' })
       const changes = this.collectChanges()
       const documents = generation.mode === 'incremental' ? [...changes.added, ...changes.updated] : changes.current
       if (changes.current.length === 0) {
         if (generation.mode !== 'incremental') throw new RangeError('没有可用于生成 Wiki 的文档')
-        this.ctx.wikiStorage.replaceWiki([], [], new Date().toISOString())
+        const activePages = this.ctx.wikiStorage.listPages().filter(page => page.pageType !== 'index')
+        if (confirmed === undefined) {
+          this.ctx.wikiStorage.updateGeneration(id, {
+            state: 'planned',
+            phase: 'awaiting-confirmation',
+            candidateCount: 0,
+            acceptedCandidateCount: 0,
+            completedSteps: generation.totalSteps - 1,
+            plan: {
+              documentFingerprint: documentFingerprint([]),
+              candidates: [],
+              archivePages: activePages.map(({ id: pageId, slug, title, pageType: type, purpose }) => ({
+                id: pageId,
+                slug,
+                title,
+                pageType: type,
+                purpose,
+              })),
+              preservedPageCount: 0,
+            },
+          })
+          return
+        }
+        const preserved = this.storedPages().filter(page => page.pageType !== 'index'
+          && !confirmed.archiveSlugs.has(page.slug))
+        this.ctx.wikiStorage.replaceWiki([
+          createIndexPage(preserved, []),
+          ...preserved,
+        ], [], new Date().toISOString())
         this.ctx.wikiStorage.updateGeneration(id, {
           state: 'completed',
           phase: 'completed',
@@ -312,7 +381,7 @@ export class LlmWiki extends Service {
         return
       }
 
-      if (generation.mode === 'incremental'
+      if (confirmed === undefined && generation.mode === 'incremental'
         && changes.added.length + changes.updated.length + changes.deleted.length === 0) {
         this.throwIfCancelled(id, controller.signal)
         this.ctx.wikiStorage.updateGeneration(id, {
@@ -323,7 +392,7 @@ export class LlmWiki extends Service {
         return
       }
 
-      for (const document of documents) {
+      if (confirmed === undefined) for (const document of documents) {
         this.throwIfCancelled(id, controller.signal)
         generation = this.ctx.wikiStorage.updateGeneration(id, { phase: `summarizing:${document.id}` })
         const cached = this.ctx.wikiStorage.cachedSummary(document.id, document.contentHash)
@@ -364,9 +433,9 @@ export class LlmWiki extends Service {
         contentHash: item.contentHash,
         summary: item.summary ?? '',
       }))
-      const planningDocuments = generation.mode === 'incremental'
+      const planningDocuments = confirmed === undefined && generation.mode === 'incremental'
         ? [...changes.added, ...changes.updated]
-        : changes.current
+        : confirmed === undefined ? changes.current : []
       const planningDocumentIds = new Set(planningDocuments.map(document => document.id))
       const planningDocumentInput = documentInput.filter(document => planningDocumentIds.has(document.documentId))
       generation = this.ctx.wikiStorage.updateGeneration(id, { phase: 'planning' })
@@ -475,11 +544,11 @@ export class LlmWiki extends Service {
       const orphanedSlugs = new Set([...directlyImpactedSlugs].filter(slug =>
         !forcedCandidates.some(candidate => candidate.slug === slug)))
       const forcedSlugs = new Set(forcedCandidates.map(candidate => candidate.slug))
-      let acceptedCandidates = mergeCandidates([
-        ...forcedCandidates,
-        ...mergeCandidates(candidates).filter(candidateAccepted),
-      ]).filter(candidate => candidateAccepted(candidate) || forcedSlugs.has(candidate.slug))
-      if (generation.mode === 'incremental') {
+      let acceptedCandidates = confirmed?.candidates ?? mergeCandidates([
+          ...forcedCandidates,
+          ...mergeCandidates(candidates).filter(candidateAccepted),
+        ]).filter(candidate => candidateAccepted(candidate) || forcedSlugs.has(candidate.slug))
+      if (confirmed === undefined && generation.mode === 'incremental') {
         acceptedCandidates = acceptedCandidates.flatMap(candidate => {
           const existing = storedPages.find(page => page.slug === candidate.slug
             || (compatiblePageTypes(page.pageType ?? 'concept', candidate.pageType)
@@ -504,12 +573,46 @@ export class LlmWiki extends Service {
       if (acceptedCandidates.length === 0 && generation.mode !== 'incremental') {
         throw new Error('词条规划未发现达到独立成页标准的候选')
       }
-      generation = this.ctx.wikiStorage.updateGeneration(id, {
-        candidateCount: mergeCandidates([...forcedCandidates, ...candidates]).length,
-        acceptedCandidateCount: acceptedCandidates.length,
-        completedSteps: generation.completedSteps + 1,
-        phase: 'synthesizing',
-      })
+      if (confirmed === undefined) {
+        const activePages = this.ctx.wikiStorage.listPages()
+        const activeSlugs = new Set(activePages.map(page => page.slug))
+        const archivedSlugs = new Set(this.ctx.wikiStorage.listArchivedPages().map(page => page.slug))
+        const titleByDocumentId = new Map(changes.current.map(document => [document.id, document.title]))
+        const planCandidates: WikiGenerationCandidate[] = acceptedCandidates.map(candidate => ({
+          ...candidate,
+          sourceTitles: candidate.sourceDocumentIds.flatMap(documentId => {
+            const title = titleByDocumentId.get(documentId)
+            return title === undefined ? [] : [title]
+          }),
+          action: activeSlugs.has(candidate.slug) ? 'update' : archivedSlugs.has(candidate.slug) ? 'restore' : 'create',
+        }))
+        const archivePages = activePages.filter(page => orphanedSlugs.has(page.slug))
+          .map(({ id: pageId, slug, title, pageType: type, purpose }) => ({
+            id: pageId,
+            slug,
+            title,
+            pageType: type,
+            purpose,
+          }))
+        const plan: WikiGenerationPlan = {
+          documentFingerprint: documentFingerprint(changes.current),
+          candidates: planCandidates,
+          archivePages,
+          preservedPageCount: activePages.filter(page => page.pageType !== 'index'
+            && !planCandidates.some(candidate => candidate.slug === page.slug)
+            && !orphanedSlugs.has(page.slug)).length,
+        }
+        this.ctx.wikiStorage.updateGeneration(id, {
+          state: 'planned',
+          phase: 'awaiting-confirmation',
+          candidateCount: mergeCandidates([...forcedCandidates, ...candidates]).length,
+          acceptedCandidateCount: acceptedCandidates.length,
+          completedSteps: generation.completedSteps + 1,
+          plan,
+        })
+        return
+      }
+      generation = this.ctx.wikiStorage.updateGeneration(id, { state: 'running', phase: 'synthesizing' })
       let parsedPages: PlannedPage[] = []
       for (const candidateBatch of chunks(acceptedCandidates, 3)) {
         const acceptedSourceIds = new Set(candidateBatch.flatMap(candidate => candidate.sourceDocumentIds))
@@ -593,11 +696,9 @@ export class LlmWiki extends Service {
       const planned = organizePages(consolidated, changes.current)
       const plannedTopics = planned.pages.filter(page => page.pageType !== 'index')
       const regeneratedSlugs = new Set(plannedTopics.map(page => page.slug))
-      const preserved = generation.mode === 'incremental'
-        ? storedPages.filter(page => page.pageType !== 'index'
-          && !regeneratedSlugs.has(page.slug)
-          && !orphanedSlugs.has(page.slug))
-        : this.lockedPages()
+      const preserved = storedPages.filter(page => page.pageType !== 'index'
+        && !regeneratedSlugs.has(page.slug)
+        && !confirmed.archiveSlugs.has(page.slug))
       const preservedSlugs = new Set(preserved.map(page => page.slug))
       const generatedTopics = plannedTopics.filter(page => !preservedSlugs.has(page.slug))
       const finalTopics = [...generatedTopics, ...preserved]
@@ -731,10 +832,6 @@ export class LlmWiki extends Service {
     })
   }
 
-  private lockedPages(): WikiPageWrite[] {
-    return this.storedPages().filter(page => page.state === 'locked')
-  }
-
   private collectChanges(): DocumentChangeSet {
     const current = this.ctx.knowledgeCatalog.listLibraries()
       .flatMap(library => this.ctx.knowledgeCatalog.listDocuments(library.id))
@@ -791,6 +888,12 @@ function snapshot(document: KnowledgeDocument): WikiDocumentSnapshot {
     title: document.title,
     contentHash: document.contentHash,
   }
+}
+
+function documentFingerprint(documents: KnowledgeDocument[]): string {
+  return createHash('sha256')
+    .update(documents.map(document => `${document.id}:${document.contentHash}`).sort().join('\n'))
+    .digest('hex')
 }
 
 function wikiSource(document: KnowledgeDocument): WikiSource {
