@@ -79,6 +79,7 @@ export class KnowledgeDocuments extends Service {
     }
     this.ctx.emit('knowledge/graph/invalidate')
     this.ctx.emit('knowledge/document/deleted', deletedDocumentIds)
+    this.ctx.emit('knowledge/library/deleted', libraryId)
     return { deletedLibraryId: libraryId, deletedDocumentIds }
   }
 

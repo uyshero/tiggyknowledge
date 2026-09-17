@@ -1,9 +1,27 @@
-import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
+import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { Context, Service } from '@deepseek-ai/cordis'
 import { dump, load } from 'js-yaml'
-import type { DshIntegrationAccessKeyMetadata, DshIntegrationSettings, GenerateDshIntegrationAccessKeyResult, LlmIntegrationSettings, SettingsSnapshot, UpdateDshIntegrationSettingsInput, UpdateLlmIntegrationSettingsInput } from '@tiggyknowledge/contracts'
+import type {
+  DshIntegrationAccessKeyMetadata,
+  DshIntegrationSettings,
+  GenerateDshIntegrationAccessKeyResult,
+  LlmIntegrationSettings,
+  LlmProviderModel,
+  LlmProviderSettings,
+  SettingsSnapshot,
+  UpdateDshIntegrationSettingsInput,
+  UpdateLlmIntegrationSettingsInput,
+} from '@tiggyknowledge/contracts'
+import {
+  DEFAULT_LLM_BASE_URL,
+  DEFAULT_LLM_MAX_INPUT_TOKENS,
+  DEFAULT_LLM_MAX_OUTPUT_TOKENS,
+  DEFAULT_LLM_REQUEST_TIMEOUT_MS,
+  LEGACY_LLM_MODEL_ID,
+  LEGACY_LLM_PROVIDER_ID,
+} from '@tiggyknowledge/contracts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -28,19 +46,31 @@ const DEFAULT_SETTINGS: Record<string, unknown> = {
     defaultKnowledgeBaseIds: [],
   } satisfies DshIntegrationSettings,
   llmIntegration: {
-    enabled: false,
-    baseUrl: 'https://api.openai.com/v1',
-    model: '',
-    requestTimeoutMs: 60_000,
-    maxInputTokens: 100_000,
-    maxOutputTokens: 4_000,
-    apiKeyConfigured: false,
-  } satisfies LlmIntegrationSettings,
+    providers: [],
+  } satisfies StoredLlmIntegration,
 }
 
 interface StoredDshIntegrationSettings extends DshIntegrationSettings {
   accessKeyHash?: string
 }
+
+interface StoredLlmProvider {
+  id: string
+  name: string
+  baseUrl: string
+  requestTimeoutMs: number
+  maxInputTokens: number
+  maxOutputTokens: number
+  models: LlmProviderModel[]
+}
+
+interface StoredLlmIntegration {
+  providers: StoredLlmProvider[]
+  preferredModelId?: string
+  wikiModelId?: string
+}
+
+export type LlmCredentialLookup = (providerId: string) => { configured: boolean, preview?: string }
 
 export class FileSettings extends Service {
   private readonly filename: string
@@ -79,17 +109,13 @@ export class FileSettings extends Service {
     return this.snapshot()
   }
 
-  llmIntegration(apiKeyConfigured = false, apiKeyPreview?: string): LlmIntegrationSettings {
-    const settings = normalizeLlmIntegration(this.values.llmIntegration)
-    return {
-      ...settings,
-      apiKeyConfigured,
-      ...(apiKeyPreview === undefined ? {} : { apiKeyPreview }),
-    }
+  llmIntegration(lookup: LlmCredentialLookup = () => ({ configured: false })): LlmIntegrationSettings {
+    const stored = normalizeLlmIntegration(this.values.llmIntegration)
+    return attachLlmCredentials(stored, lookup)
   }
 
   updateLlmIntegration(input: UpdateLlmIntegrationSettingsInput): SettingsSnapshot {
-    const next = normalizeLlmIntegration({ ...normalizeLlmIntegration(this.values.llmIntegration), ...input })
+    const next = applyLlmIntegrationUpdate(normalizeLlmIntegration(this.values.llmIntegration), input)
     this.values = { ...this.values, llmIntegration: next }
     this.write(this.values)
     return this.snapshot()
@@ -223,24 +249,149 @@ function previewAccessKey(accessKey: string): string {
   return `${accessKey.slice(0, 6)}…${accessKey.slice(-6)}`
 }
 
-function normalizeLlmIntegration(value: unknown): LlmIntegrationSettings {
+function attachLlmCredentials(stored: StoredLlmIntegration, lookup: LlmCredentialLookup): LlmIntegrationSettings {
+  const settings: LlmIntegrationSettings = {
+    providers: stored.providers.map(provider => {
+      const credentials = lookup(provider.id)
+      const next: LlmProviderSettings = {
+        ...provider,
+        apiKeyConfigured: credentials.configured,
+      }
+      if (credentials.preview !== undefined) next.apiKeyPreview = credentials.preview
+      return next
+    }),
+  }
+  if (stored.preferredModelId !== undefined) settings.preferredModelId = stored.preferredModelId
+  if (stored.wikiModelId !== undefined) settings.wikiModelId = stored.wikiModelId
+  return settings
+}
+
+function applyLlmIntegrationUpdate(current: StoredLlmIntegration, input: UpdateLlmIntegrationSettingsInput): StoredLlmIntegration {
+  const providers = input.providers === undefined ? current.providers : normalizeProviders(input.providers)
+  const modelIds = new Set(providers.flatMap(provider => provider.models.map(model => model.id)))
+  const preferredModelId = input.preferredModelId === undefined
+    ? current.preferredModelId
+    : input.preferredModelId
+  const wikiModelId = input.wikiModelId === undefined
+    ? current.wikiModelId
+    : input.wikiModelId
+  const resolvedPreferred = preferredModelId !== null && preferredModelId !== undefined && modelIds.has(preferredModelId)
+    ? preferredModelId
+    : providers[0]?.models[0]?.id
+  const resolvedWiki = wikiModelId !== null && wikiModelId !== undefined && modelIds.has(wikiModelId)
+    ? wikiModelId
+    : undefined
+  const next: StoredLlmIntegration = { providers }
+  if (resolvedPreferred !== undefined) next.preferredModelId = resolvedPreferred
+  if (resolvedWiki !== undefined && resolvedWiki !== resolvedPreferred) next.wikiModelId = resolvedWiki
+  return next
+}
+
+function normalizeLlmIntegration(value: unknown): StoredLlmIntegration {
   const source = typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : {}
-  const baseUrl = normalizeLlmBaseUrl(source.baseUrl)
+  if (Array.isArray(source.providers)) {
+    return applyLlmIntegrationUpdate({
+      providers: normalizeProviders(source.providers),
+      ...(typeof source.preferredModelId === 'string' ? { preferredModelId: source.preferredModelId } : {}),
+      ...(typeof source.wikiModelId === 'string' ? { wikiModelId: source.wikiModelId } : {}),
+    }, {})
+  }
+  return migrateLegacyLlmIntegration(source)
+}
+
+function migrateLegacyLlmIntegration(source: Record<string, unknown>): StoredLlmIntegration {
   const model = typeof source.model === 'string' ? source.model.trim() : ''
   if (model.length > 200) throw new RangeError('LLM 模型名称不能超过 200 个字符')
+  if (model.length === 0) return { providers: [] }
+  return applyLlmIntegrationUpdate({
+    providers: [{
+      id: LEGACY_LLM_PROVIDER_ID,
+      name: '默认提供方',
+      baseUrl: normalizeLlmBaseUrl(source.baseUrl),
+      requestTimeoutMs: normalizeInteger(source.requestTimeoutMs, DEFAULT_LLM_REQUEST_TIMEOUT_MS, 5_000, 300_000, '请求超时'),
+      maxInputTokens: normalizeInteger(source.maxInputTokens, DEFAULT_LLM_MAX_INPUT_TOKENS, 1_000, 2_000_000, '最大输入 Token'),
+      maxOutputTokens: normalizeInteger(source.maxOutputTokens, DEFAULT_LLM_MAX_OUTPUT_TOKENS, 256, 100_000, '最大输出 Token'),
+      models: [{
+        id: LEGACY_LLM_MODEL_ID,
+        name: model,
+        model,
+      }],
+    }],
+    preferredModelId: LEGACY_LLM_MODEL_ID,
+  }, {})
+}
+
+function normalizeProviders(value: unknown[]): StoredLlmProvider[] {
+  if (value.length > 20) throw new RangeError('最多配置 20 个模型提供方')
+  const providers: StoredLlmProvider[] = []
+  const providerIds = new Set<string>()
+  const modelIds = new Set<string>()
+  for (const item of value) {
+    const provider = normalizeProvider(item, providerIds, modelIds)
+    providers.push(provider)
+  }
+  return providers
+}
+
+function normalizeProvider(value: unknown, providerIds: Set<string>, modelIds: Set<string>): StoredLlmProvider {
+  const source = typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : undefined
+  if (source === undefined) throw new RangeError('模型提供方配置无效')
+  const id = normalizeEntityId(source.id, '提供方')
+  if (providerIds.has(id)) throw new RangeError('模型提供方 ID 不能重复')
+  providerIds.add(id)
+  const name = normalizeProviderName(source.name)
+  const models = normalizeModels(source.models, modelIds)
   return {
-    enabled: typeof source.enabled === 'boolean' ? source.enabled : false,
-    baseUrl,
-    model,
-    requestTimeoutMs: normalizeInteger(source.requestTimeoutMs, 60_000, 5_000, 300_000, '请求超时'),
-    maxInputTokens: normalizeInteger(source.maxInputTokens, 100_000, 1_000, 2_000_000, '最大输入 Token'),
-    maxOutputTokens: normalizeInteger(source.maxOutputTokens, 4_000, 256, 100_000, '最大输出 Token'),
-    apiKeyConfigured: false,
+    id,
+    name,
+    baseUrl: normalizeLlmBaseUrl(source.baseUrl),
+    requestTimeoutMs: normalizeInteger(source.requestTimeoutMs, DEFAULT_LLM_REQUEST_TIMEOUT_MS, 5_000, 300_000, '请求超时'),
+    maxInputTokens: normalizeInteger(source.maxInputTokens, DEFAULT_LLM_MAX_INPUT_TOKENS, 1_000, 2_000_000, '最大输入 Token'),
+    maxOutputTokens: normalizeInteger(source.maxOutputTokens, DEFAULT_LLM_MAX_OUTPUT_TOKENS, 256, 100_000, '最大输出 Token'),
+    models,
   }
 }
 
+function normalizeModels(value: unknown, modelIds: Set<string>): LlmProviderModel[] {
+  if (!Array.isArray(value) || value.length === 0) throw new RangeError('每个提供方至少配置一个模型')
+  if (value.length > 50) throw new RangeError('每个提供方最多配置 50 个模型')
+  return value.map(item => {
+    const source = typeof item === 'object' && item !== null && !Array.isArray(item) ? item as Record<string, unknown> : undefined
+    if (source === undefined) throw new RangeError('模型配置无效')
+    const id = normalizeEntityId(source.id, '模型')
+    if (modelIds.has(id)) throw new RangeError('模型 ID 不能重复')
+    modelIds.add(id)
+    const model = normalizeModelId(source.model)
+    const name = typeof source.name === 'string' && source.name.trim().length > 0 ? source.name.trim() : model
+    if (name.length > 200) throw new RangeError('模型显示名称不能超过 200 个字符')
+    return { id, name, model }
+  })
+}
+
+function normalizeProviderName(value: unknown): string {
+  if (typeof value !== 'string') throw new RangeError('提供方名称必须是文本')
+  const name = value.trim()
+  if (name.length === 0 || name.length > 80) throw new RangeError('提供方名称长度必须在 1 到 80 个字符之间')
+  return name
+}
+
+function normalizeModelId(value: unknown): string {
+  if (typeof value !== 'string') throw new RangeError('模型 ID 必须是文本')
+  const model = value.trim()
+  if (model.length === 0 || model.length > 200) throw new RangeError('模型 ID 长度必须在 1 到 200 个字符之间')
+  return model
+}
+
+function normalizeEntityId(value: unknown, label: string): string {
+  if (value === undefined || value === '') return randomUUID()
+  if (typeof value !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_-]{1,63}$/.test(value)) {
+    throw new RangeError(`${label} ID 无效`)
+  }
+  return value
+}
+
 function normalizeLlmBaseUrl(value: unknown): string {
-  const text = typeof value === 'string' ? value.trim().replace(/\/+$/, '') : 'https://api.openai.com/v1'
+  const text = typeof value === 'string' ? value.trim().replace(/\/+$/, '') : DEFAULT_LLM_BASE_URL
   if (text.length === 0 || text.length > 500) throw new RangeError('LLM Base URL 长度无效')
   let url: URL
   try {

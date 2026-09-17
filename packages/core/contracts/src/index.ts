@@ -327,34 +327,166 @@ export interface DshIntegrationSettings {
   accessKey?: DshIntegrationAccessKeyMetadata
 }
 
+export const DEFAULT_LLM_BASE_URL = 'https://api.openai.com/v1'
+export const DEFAULT_LLM_REQUEST_TIMEOUT_MS = 120_000
+export const DEFAULT_LLM_MAX_INPUT_TOKENS = 32_000
+export const DEFAULT_LLM_MAX_OUTPUT_TOKENS = 4_096
+export const LEGACY_LLM_PROVIDER_ID = 'legacy-provider'
+export const LEGACY_LLM_MODEL_ID = 'legacy-model'
+
+export interface LlmProviderModel {
+  id: string
+  name: string
+  model: string
+}
+
+export interface LlmProviderSettings {
+  id: string
+  name: string
+  baseUrl: string
+  requestTimeoutMs: number
+  maxInputTokens: number
+  maxOutputTokens: number
+  models: LlmProviderModel[]
+  apiKeyConfigured: boolean
+  apiKeyPreview?: string
+}
+
 export interface LlmIntegrationSettings {
-  enabled: boolean
+  providers: LlmProviderSettings[]
+  preferredModelId?: string
+  wikiModelId?: string
+}
+
+export interface LlmResolvedEndpoint {
+  providerId: string
+  providerName: string
+  modelId: string
+  modelName: string
   baseUrl: string
   model: string
   requestTimeoutMs: number
   maxInputTokens: number
   maxOutputTokens: number
   apiKeyConfigured: boolean
-  apiKeyPreview?: string
 }
 
-export interface UpdateLlmIntegrationSettingsInput {
-  enabled?: boolean
-  baseUrl?: string
-  model?: string
+export interface LlmModelChoice {
+  id: string
+  providerId: string
+  providerName: string
+  model: string
+  name: string
+  label: string
+  apiKeyConfigured: boolean
+}
+
+export interface UpdateLlmProviderModelInput {
+  id?: string
+  name?: string
+  model: string
+}
+
+export interface UpdateLlmProviderInput {
+  id?: string
+  name: string
+  baseUrl: string
   requestTimeoutMs?: number
   maxInputTokens?: number
   maxOutputTokens?: number
+  models: UpdateLlmProviderModelInput[]
+}
+
+export interface UpdateLlmIntegrationSettingsInput {
+  providers?: UpdateLlmProviderInput[]
+  preferredModelId?: string | null
+  wikiModelId?: string | null
 }
 
 export interface SetLlmApiKeyInput {
+  providerId: string
   apiKey: string
+}
+
+export interface TestLlmConnectionInput {
+  providerId: string
+  modelId?: string
 }
 
 export interface TestLlmConnectionResult {
   ok: true
+  providerId: string
   model: string
   message: string
+}
+
+export function llmModelChoices(settings: LlmIntegrationSettings): LlmModelChoice[] {
+  const choices: LlmModelChoice[] = []
+  for (const provider of settings.providers) {
+    for (const model of provider.models) {
+      const name = model.name.trim() || model.model
+      choices.push({
+        id: model.id,
+        providerId: provider.id,
+        providerName: provider.name,
+        model: model.model,
+        name,
+        label: `${provider.name} / ${name}`,
+        apiKeyConfigured: provider.apiKeyConfigured,
+      })
+    }
+  }
+  return choices
+}
+
+export function resolveLlmModel(settings: LlmIntegrationSettings, modelId: string | undefined): LlmResolvedEndpoint | undefined {
+  if (modelId === undefined || modelId.trim() === '') return undefined
+  for (const provider of settings.providers) {
+    const model = provider.models.find(item => item.id === modelId)
+    if (model === undefined) continue
+    const modelName = model.name.trim() || model.model
+    return {
+      providerId: provider.id,
+      providerName: provider.name,
+      modelId: model.id,
+      modelName,
+      baseUrl: provider.baseUrl,
+      model: model.model,
+      requestTimeoutMs: provider.requestTimeoutMs,
+      maxInputTokens: provider.maxInputTokens,
+      maxOutputTokens: provider.maxOutputTokens,
+      apiKeyConfigured: provider.apiKeyConfigured,
+    }
+  }
+  return undefined
+}
+
+export function resolvePreferredLlmModel(settings: LlmIntegrationSettings): LlmResolvedEndpoint | undefined {
+  return resolveLlmModel(settings, settings.preferredModelId)
+    ?? resolveLlmModel(settings, settings.providers.find(provider => provider.models[0] !== undefined)?.models[0]?.id)
+}
+
+export function resolveWikiLlmModel(settings: LlmIntegrationSettings): LlmResolvedEndpoint | undefined {
+  return resolveLlmModel(settings, settings.wikiModelId) ?? resolvePreferredLlmModel(settings)
+}
+
+export function resolveLlmProviderModel(
+  settings: LlmIntegrationSettings,
+  providerId: string,
+  modelId?: string,
+): LlmResolvedEndpoint | undefined {
+  const provider = settings.providers.find(item => item.id === providerId)
+  if (provider === undefined) return undefined
+  const model = modelId === undefined || modelId.trim() === ''
+    ? provider.models[0]
+    : provider.models.find(item => item.id === modelId)
+  if (model === undefined) return undefined
+  return resolveLlmModel(settings, model.id)
+}
+
+export function isLlmReady(settings: LlmIntegrationSettings): boolean {
+  const endpoint = resolveWikiLlmModel(settings)
+  return endpoint !== undefined && endpoint.apiKeyConfigured && endpoint.model.trim().length > 0
 }
 
 export type WikiGenerationMode = 'initial' | 'incremental' | 'rebuild'
@@ -687,6 +819,82 @@ export interface DshKnowledgeOkfResponse extends KnowledgeOkfMapping {
   reference?: KnowledgeSourceReference
 }
 
+export type LibraryChatMessageRole = 'user' | 'assistant'
+export type LibraryChatMessageState = 'generating' | 'completed' | 'cancelled' | 'failed'
+
+export interface LibraryChatTokenUsage {
+  inputTokens: number
+  outputTokens: number
+}
+
+export interface LibraryChatSource {
+  citationNumber?: number
+  documentId: string
+  libraryId: string
+  title: string
+  referenceUri: `tk://local/${string}`
+  location: string
+  snippet: string
+  score: number
+}
+
+export interface LibraryChatMessage {
+  id: string
+  libraryId: string
+  role: LibraryChatMessageRole
+  state: LibraryChatMessageState
+  content: string
+  modelId?: string
+  sources: LibraryChatSource[]
+  tokenUsage: LibraryChatTokenUsage
+  createdAt: string
+  updatedAt: string
+  error?: string
+}
+
+export interface LibraryChatSummary {
+  content: string
+  cutoffMessageId: string
+  updatedAt: string
+}
+
+export interface LibraryChatSnapshot {
+  libraryId: string
+  messages: LibraryChatMessage[]
+  summary?: LibraryChatSummary
+  activeMessageId?: string
+}
+
+export type LibraryChatTask =
+  | 'retrieval'
+  | 'summarize-current-document'
+  | 'summarize-named-document'
+  | 'summarize-library'
+
+export interface SendLibraryChatMessageInput {
+  content: string
+  modelId?: string
+  contextDocumentId?: string
+  taskOverride?: LibraryChatTask
+}
+
+export type LibraryChatStreamEvent =
+  | { type: 'started'; userMessage: LibraryChatMessage; assistantMessage: LibraryChatMessage }
+  | { type: 'routed'; messageId: string; task: LibraryChatTask }
+  | { type: 'progress'; messageId: string; completed: number; total: number; phase?: string; message?: string }
+  | { type: 'sources'; messageId: string; sources: LibraryChatSource[] }
+  | { type: 'delta'; messageId: string; delta: string }
+  | { type: 'usage'; messageId: string; usage: LibraryChatTokenUsage }
+  | { type: 'completed'; message: LibraryChatMessage }
+  | { type: 'cancelled'; message: LibraryChatMessage }
+  | { type: 'error'; messageId: string; error: string }
+
+export interface CancelLibraryChatResult {
+  libraryId: string
+  cancelled: boolean
+  message?: LibraryChatMessage
+}
+
 export interface SystemSnapshot {
   product: 'tiggyknowledge'
   version: string
@@ -701,6 +909,7 @@ export interface SystemSnapshot {
 declare module '@deepseek-ai/cordis' {
   interface Events {
     'knowledge/graph/invalidate'(): void
+    'knowledge/library/deleted'(libraryId: string): void
     'knowledge/document/changed'(documentIds: string[]): void
     'knowledge/document/deleted'(documentIds: string[]): void
   }

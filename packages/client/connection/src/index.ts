@@ -25,11 +25,16 @@ import type {
   OpenDataDirectoryResult,
   RevertWikiPageInput,
   KnowledgeTagList,
+  LibraryChatSnapshot,
+  LibraryChatStreamEvent,
+  CancelLibraryChatResult,
   LlmIntegrationSettings,
+  SendLibraryChatMessageInput,
   SetLlmApiKeyInput,
   StartWikiGenerationInput,
   SystemSnapshot,
   SettingsSnapshot,
+  TestLlmConnectionInput,
   TestLlmConnectionResult,
   UpdateLlmIntegrationSettingsInput,
   UpdateWikiPageInput,
@@ -51,6 +56,59 @@ import type {
   RenameKnowledgeTagInput,
 } from '@tiggyknowledge/contracts'
 
+function decodeSseEvent(block: string): LibraryChatStreamEvent | undefined {
+  let eventName: string | undefined
+  const data: string[] = []
+  for (const rawLine of block.split(/\r\n|\r|\n/)) {
+    const line = rawLine.startsWith('\uFEFF') ? rawLine.slice(1) : rawLine
+    if (line.length === 0 || line.startsWith(':')) continue
+    const separator = line.indexOf(':')
+    const field = separator < 0 ? line : line.slice(0, separator)
+    let value = separator < 0 ? '' : line.slice(separator + 1)
+    if (value.startsWith(' ')) value = value.slice(1)
+    if (field === 'event') eventName = value
+    if (field === 'data') data.push(value)
+  }
+  if (data.length === 0) return undefined
+  const parsed = JSON.parse(data.join('\n')) as LibraryChatStreamEvent
+  if (eventName !== undefined && eventName.length > 0 && parsed.type !== eventName) {
+    throw new Error(`connection: SSE event type mismatch (${eventName})`)
+  }
+  return parsed
+}
+
+export async function *parseLibraryChatSse(stream: ReadableStream<Uint8Array>): AsyncGenerator<LibraryChatStreamEvent> {
+  const reader = stream.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  let reachedEof = false
+  try {
+    while (true) {
+      const result = await reader.read()
+      if (result.done) {
+        reachedEof = true
+        break
+      }
+      buffer += decoder.decode(result.value, { stream: true })
+      while (true) {
+        const separator = buffer.match(/\r\n\r\n|\r\n\n|\n\r\n|\n\n|\r\r/)
+        if (separator?.index === undefined) break
+        const event = decodeSseEvent(buffer.slice(0, separator.index))
+        buffer = buffer.slice(separator.index + separator[0].length)
+        if (event !== undefined) yield event
+      }
+    }
+    buffer += decoder.decode()
+    if (buffer.trim().length > 0) {
+      const event = decodeSseEvent(buffer)
+      if (event !== undefined) yield event
+    }
+  } finally {
+    if (!reachedEof) await reader.cancel().catch(() => undefined)
+    reader.releaseLock()
+  }
+}
+
 declare module '@deepseek-ai/cordis' {
   interface Context {
     connection: ConnectionService
@@ -64,6 +122,43 @@ export class ConnectionService extends Service {
 
   async system(signal?: AbortSignal): Promise<SystemSnapshot> {
     return await this.request<SystemSnapshot>('/api/system', signal === undefined ? {} : { signal })
+  }
+
+  async libraryChatSnapshot(libraryId: string, signal?: AbortSignal): Promise<LibraryChatSnapshot> {
+    return await this.request<LibraryChatSnapshot>(`/api/libraries/${encodeURIComponent(libraryId)}/chat`, signal === undefined ? {} : { signal })
+  }
+
+  async clearLibraryChat(libraryId: string, signal?: AbortSignal): Promise<LibraryChatSnapshot> {
+    return await this.request<LibraryChatSnapshot>(`/api/libraries/${encodeURIComponent(libraryId)}/chat`, {
+      method: 'DELETE',
+      ...(signal === undefined ? {} : { signal }),
+    })
+  }
+
+  async cancelLibraryChat(libraryId: string, signal?: AbortSignal): Promise<CancelLibraryChatResult> {
+    return await this.request<CancelLibraryChatResult>(`/api/libraries/${encodeURIComponent(libraryId)}/chat/cancel`, {
+      method: 'POST',
+      ...(signal === undefined ? {} : { signal }),
+    })
+  }
+
+  async *sendLibraryChatMessage(libraryId: string, input: SendLibraryChatMessageInput, signal?: AbortSignal): AsyncGenerator<LibraryChatStreamEvent> {
+    const path = `/api/libraries/${encodeURIComponent(libraryId)}/chat/messages`
+    const response = await fetch(path, {
+      body: JSON.stringify(input),
+      headers: { accept: 'text/event-stream', 'content-type': 'application/json' },
+      method: 'POST',
+      ...(signal === undefined ? {} : { signal }),
+    })
+    if (!response.ok) {
+      const body = await response.json().catch(() => undefined) as { message?: string } | undefined
+      throw new Error(body?.message ?? `connection: ${path} returned ${response.status}`)
+    }
+    if (response.body === null) throw new Error('connection: chat stream response has no body')
+    for await (const event of parseLibraryChatSse(response.body)) {
+      yield event
+      if (event.type === 'completed' || event.type === 'cancelled' || event.type === 'error') return
+    }
   }
 
   async openDataDirectory(signal?: AbortSignal): Promise<OpenDataDirectoryResult> {
@@ -107,8 +202,10 @@ export class ConnectionService extends Service {
     })
   }
 
-  async testLlmConnection(signal?: AbortSignal): Promise<TestLlmConnectionResult> {
+  async testLlmConnection(input: TestLlmConnectionInput, signal?: AbortSignal): Promise<TestLlmConnectionResult> {
     return await this.request<TestLlmConnectionResult>('/api/settings/llm/test', {
+      body: JSON.stringify(input),
+      headers: { 'content-type': 'application/json' },
       method: 'POST',
       ...(signal === undefined ? {} : { signal }),
     })

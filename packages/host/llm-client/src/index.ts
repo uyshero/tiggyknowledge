@@ -1,5 +1,5 @@
 import { Context, Service } from '@deepseek-ai/cordis'
-import type { LlmIntegrationSettings, TestLlmConnectionResult } from '@tiggyknowledge/contracts'
+import type { LlmResolvedEndpoint, TestLlmConnectionResult } from '@tiggyknowledge/contracts'
 import type {} from '@tiggyknowledge/llm-credentials'
 
 declare module '@deepseek-ai/cordis' {
@@ -8,13 +8,51 @@ declare module '@deepseek-ai/cordis' {
   }
 }
 
-export interface ChatMessage {
+export interface TextChatMessage {
   role: 'system' | 'user' | 'assistant'
   content: string
 }
 
+export interface ToolCall {
+  id: string
+  type: 'function'
+  function: {
+    name: string
+    arguments: string
+  }
+}
+
+export interface AssistantToolCallMessage {
+  role: 'assistant'
+  content?: string | null
+  tool_calls: ToolCall[]
+}
+
+export interface ToolResultChatMessage {
+  role: 'tool'
+  content: string
+  tool_call_id: string
+}
+
+export type ChatMessage = TextChatMessage | AssistantToolCallMessage | ToolResultChatMessage
+
+export interface ToolSchema {
+  type: 'function'
+  function: {
+    name: string
+    description?: string
+    parameters: Record<string, unknown>
+  }
+}
+
+export type ToolChoice =
+  | 'none'
+  | 'auto'
+  | 'required'
+  | { type: 'function'; function: { name: string } }
+
 export interface ChatCompletionInput {
-  settings: LlmIntegrationSettings
+  settings: LlmResolvedEndpoint
   messages: ChatMessage[]
   signal?: AbortSignal
   temperature?: number
@@ -27,6 +65,20 @@ export interface ChatCompletionResult {
   inputTokens: number
   outputTokens: number
 }
+
+export interface ChatCompletionStreamInput extends Omit<ChatCompletionInput, 'json' | 'maxAttempts'> {
+  tools?: ToolSchema[]
+  toolChoice?: ToolChoice
+}
+
+export type ChatCompletionFinishReason = 'stop' | 'tool_calls' | 'length' | 'content_filter'
+
+export type ChatCompletionStreamEvent =
+  | { type: 'delta'; content: string }
+  | { type: 'tool-call-delta'; index: number; id: string; name: string; argumentsDelta: string }
+  | { type: 'tool-calls'; toolCalls: ToolCall[] }
+  | { type: 'usage'; inputTokens: number; outputTokens: number }
+  | { type: 'finish'; reason: ChatCompletionFinishReason }
 
 interface CompletionResponse {
   choices?: Array<{ message?: { content?: unknown } }>
@@ -64,6 +116,170 @@ export class OpenAiCompatibleClient extends Service {
     throw new Error('LLM 请求未执行')
   }
 
+  async *stream(input: ChatCompletionStreamInput): AsyncGenerator<ChatCompletionStreamEvent> {
+    validateSettings(input.settings)
+    if (input.messages.length === 0) throw new RangeError('LLM 消息不能为空')
+    const timeoutSignal = AbortSignal.timeout(input.settings.requestTimeoutMs)
+    const signal = input.signal === undefined ? timeoutSignal : AbortSignal.any([input.signal, timeoutSignal])
+    let response: Response
+    try {
+      response = await fetch(completionUrl(input.settings.baseUrl), {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${this.ctx.llmCredentials.getApiKey(input.settings.providerId)}`,
+          accept: 'text/event-stream',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: input.settings.model,
+          messages: input.messages,
+          max_tokens: input.settings.maxOutputTokens,
+          stream: true,
+          stream_options: { include_usage: true },
+          ...(input.temperature === undefined ? {} : { temperature: input.temperature }),
+          ...(input.tools === undefined ? {} : { tools: input.tools }),
+          ...(input.toolChoice === undefined ? {} : { tool_choice: input.toolChoice }),
+          ...providerRequestOptions(input.settings),
+        }),
+        signal,
+      })
+    } catch (error) {
+      throw requestFailure(error, signal, input.signal, input.settings.requestTimeoutMs)
+    }
+    if (!response.ok) {
+      const raw = await response.text()
+      let message = raw.slice(0, 500)
+      try {
+        const payload = JSON.parse(raw) as CompletionResponse
+        if (typeof payload.error?.message === 'string') message = payload.error.message
+      } catch {
+        // Preserve the provider's raw error body.
+      }
+      throw new Error(`LLM 请求失败（HTTP ${response.status}）：${message}`)
+    }
+    if (response.body === null) throw new Error('LLM 流式响应缺少响应体')
+
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+    let buffer = ''
+    let dataLines: string[] = []
+    const toolCalls = new Map<number, PartialToolCall>()
+    let finishReason: ChatCompletionFinishReason | undefined
+    let receivedDone = false
+    const emitFrame = function* (): Generator<ChatCompletionStreamEvent | 'done'> {
+      if (dataLines.length === 0) return
+      const data = dataLines.join('\n').trim()
+      dataLines = []
+      if (data === '[DONE]') {
+        receivedDone = true
+        const reason = finishReason ?? 'stop'
+        if (reason === 'tool_calls') {
+          const completedCalls = [...toolCalls.values()]
+            .sort((left, right) => left.index - right.index)
+            .map(call => ({
+              id: call.id,
+              type: 'function' as const,
+              function: { name: call.name, arguments: call.arguments },
+            }))
+          validateCompletedToolCalls(completedCalls)
+          yield {
+            type: 'tool-calls',
+            toolCalls: completedCalls,
+          }
+        } else if (toolCalls.size > 0 && reason === 'stop') {
+          throw new Error(`LLM 服务在 finish_reason=${reason} 时返回了未完成的工具调用`)
+        }
+        yield { type: 'finish', reason }
+        yield 'done'
+        return
+      }
+      let payload: StreamResponse
+      try {
+        payload = JSON.parse(data) as StreamResponse
+      } catch {
+        throw new Error('LLM 服务返回了无效 SSE JSON')
+      }
+      if (typeof payload.error?.message === 'string') throw new Error(`LLM 流式请求失败：${payload.error.message}`)
+      for (const choice of payload.choices ?? []) {
+        const content = choice.delta?.content
+        if (typeof content === 'string' && content.length > 0) yield { type: 'delta', content }
+        for (const delta of choice.delta?.tool_calls ?? []) {
+          if (!Number.isInteger(delta.index) || delta.index < 0) {
+            throw new Error('LLM 服务返回了无效 tool call index')
+          }
+          const call = toolCalls.get(delta.index) ?? {
+            index: delta.index,
+            id: '',
+            name: '',
+            arguments: '',
+          }
+          if (!toolCalls.has(delta.index)) toolCalls.set(delta.index, call)
+          if (typeof delta.id === 'string') call.id += delta.id
+          if (typeof delta.function?.name === 'string') call.name += delta.function.name
+          const argumentsDelta = typeof delta.function?.arguments === 'string' ? delta.function.arguments : ''
+          call.arguments += argumentsDelta
+          yield {
+            type: 'tool-call-delta',
+            index: delta.index,
+            id: call.id,
+            name: call.name,
+            argumentsDelta,
+          }
+        }
+        if (choice.finish_reason !== undefined && choice.finish_reason !== null) {
+          finishReason = parseFinishReason(choice.finish_reason)
+        }
+      }
+      if (payload.usage != null) {
+        yield {
+          type: 'usage',
+          inputTokens: integerOrZero(payload.usage.prompt_tokens),
+          outputTokens: integerOrZero(payload.usage.completion_tokens),
+        }
+      }
+    }
+    try {
+      let done = false
+      while (!done) {
+        const read = await reader.read()
+        buffer += decoder.decode(read.value, { stream: !read.done })
+        const lines = buffer.split(/\r?\n/)
+        buffer = lines.pop() ?? ''
+        for (const line of lines) {
+          if (line === '') {
+            for (const event of emitFrame()) {
+              if (event === 'done') {
+                done = true
+                break
+              }
+              yield event
+            }
+          } else if (line.startsWith('data:')) {
+            dataLines.push(line.slice(5).trimStart())
+          }
+        }
+        if (read.done) {
+          if (buffer.startsWith('data:')) dataLines.push(buffer.slice(5).trimStart())
+          for (const event of emitFrame()) {
+            if (event === 'done') {
+              done = true
+              break
+            }
+            yield event
+          }
+          if (!receivedDone) throw new Error('LLM 流式响应未以 [DONE] 结束')
+          break
+        }
+      }
+    } catch (error) {
+      if (signal.aborted) throw requestFailure(error, signal, input.signal, input.settings.requestTimeoutMs)
+      throw error
+    } finally {
+      await reader.cancel().catch(() => undefined)
+      reader.releaseLock()
+    }
+  }
+
   private async completeOnce(input: ChatCompletionInput): Promise<ChatCompletionResult> {
     const timeoutSignal = AbortSignal.timeout(input.settings.requestTimeoutMs)
     const signal = input.signal === undefined ? timeoutSignal : AbortSignal.any([input.signal, timeoutSignal])
@@ -72,7 +288,7 @@ export class OpenAiCompatibleClient extends Service {
       response = await fetch(completionUrl(input.settings.baseUrl), {
         method: 'POST',
         headers: {
-          authorization: `Bearer ${this.ctx.llmCredentials.getApiKey()}`,
+          authorization: `Bearer ${this.ctx.llmCredentials.getApiKey(input.settings.providerId)}`,
           'content-type': 'application/json',
         },
         body: JSON.stringify({
@@ -113,14 +329,50 @@ export class OpenAiCompatibleClient extends Service {
     }
   }
 
-  async testConnection(settings: LlmIntegrationSettings): Promise<TestLlmConnectionResult> {
+  async testConnection(settings: LlmResolvedEndpoint): Promise<TestLlmConnectionResult> {
     await this.complete({
       settings: { ...settings, maxOutputTokens: Math.min(settings.maxOutputTokens, 16) },
       messages: [{ role: 'user', content: '只回复 OK' }],
       temperature: 0,
       maxAttempts: 1,
     })
-    return { ok: true, model: settings.model, message: 'LLM 连接成功' }
+    return {
+      ok: true,
+      providerId: settings.providerId,
+      model: settings.model,
+      message: `连接成功，模型：${settings.model}`,
+    }
+  }
+}
+
+interface PartialToolCall {
+  index: number
+  id: string
+  name: string
+  arguments: string
+}
+
+interface StreamResponse {
+  choices?: Array<{
+    delta?: {
+      content?: unknown
+      tool_calls?: Array<{
+        index: number
+        id?: unknown
+        function?: {
+          name?: unknown
+          arguments?: unknown
+        }
+      }>
+    }
+    finish_reason?: unknown
+  }>
+  usage?: {
+    prompt_tokens?: unknown
+    completion_tokens?: unknown
+  } | null
+  error?: {
+    message?: unknown
   }
 }
 
@@ -129,8 +381,7 @@ function completionUrl(baseUrl: string): string {
   return normalized.endsWith('/chat/completions') ? normalized : `${normalized}/chat/completions`
 }
 
-function validateSettings(settings: LlmIntegrationSettings): void {
-  if (!settings.enabled) throw new RangeError('LLM 集成尚未启用')
+function validateSettings(settings: LlmResolvedEndpoint): void {
   if (settings.model.trim().length === 0) throw new RangeError('尚未配置 LLM 模型')
   let url: URL
   try {
@@ -147,7 +398,23 @@ function integerOrZero(value: unknown): number {
   return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : 0
 }
 
-function providerRequestOptions(settings: LlmIntegrationSettings): Record<string, unknown> {
+function parseFinishReason(value: unknown): ChatCompletionFinishReason {
+  if (value === 'stop' || value === 'tool_calls' || value === 'length' || value === 'content_filter') return value
+  throw new Error(`LLM 服务返回了未知 finish_reason：${String(value)}`)
+}
+
+function validateCompletedToolCalls(calls: ToolCall[]): void {
+  if (calls.length === 0) throw new Error('LLM 服务以 tool_calls 结束但没有返回工具调用')
+  const ids = new Set<string>()
+  for (const call of calls) {
+    if (call.id.trim().length === 0) throw new Error('LLM 服务返回了空 tool call id')
+    if (ids.has(call.id)) throw new Error(`LLM 服务返回了重复 tool call id：${call.id}`)
+    ids.add(call.id)
+    if (call.function.name.trim().length === 0) throw new Error(`工具调用 ${call.id} 缺少函数名称`)
+  }
+}
+
+function providerRequestOptions(settings: LlmResolvedEndpoint): Record<string, unknown> {
   try {
     const hostname = new URL(settings.baseUrl).hostname.toLowerCase()
     if (hostname === 'aliyuncs.com' || hostname.endsWith('.aliyuncs.com')) {
@@ -161,6 +428,14 @@ function providerRequestOptions(settings: LlmIntegrationSettings): Record<string
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+function requestFailure(error: unknown, signal: AbortSignal, callerSignal: AbortSignal | undefined, timeoutMs: number): Error {
+  if (signal.aborted) {
+    if (callerSignal?.aborted === true) return new Error('LLM 请求已取消', { cause: error })
+    return new Error(`LLM 请求超时（${timeoutMs}ms）`, { cause: error })
+  }
+  return new Error(`无法连接 LLM 服务：${errorMessage(error)}`, { cause: error })
 }
 
 function isRetryable(error: unknown): boolean {

@@ -525,7 +525,7 @@ export function apply(ctx: Context): void {
           <section className="wiki-empty">
             <div className="wiki-empty-icon"><Settings size={23} /></div>
             <h2>先配置 AI 模型</h2>
-            <p>生成 Wiki 需要可用的模型地址、模型名称和 API Key。配置完成后返回此处开始生成。</p>
+            <p>生成 Wiki 需要已配置的提供方、模型和 API Key。配置完成后默认使用首选模型，也可为 Wiki 生成单独指定模型。</p>
             <button className="primary-button" type="button" onClick={() => ctx.clientApp.selectPage('settings', { panelId: 'llm' })}><Settings size={16} />前往 AI 模型设置</button>
           </section>
         ) : !generated && !generating && !planningReady ? (

@@ -74,4 +74,38 @@ await cp(
 )
 await mkdir(resolve(projectRoot, 'apps/web'), { recursive: true })
 await cp(resolve(workspaceRoot, 'apps/web/dist'), resolve(projectRoot, 'apps/web/dist'), { recursive: true })
+
+// The Host imports only the legacy display API and its fake-worker fallback.
+// Browser PDF.js is already bundled by Vite, so discard duplicate viewers,
+// source maps, type declarations, fonts and optional rendering resources.
+const pdfjsRoot = resolve(projectRoot, 'node_modules/pdfjs-dist')
+const pdfjsLegacyBuild = resolve(pdfjsRoot, 'legacy/build')
+for (const name of [
+  'build',
+  'cmaps',
+  'iccs',
+  'image_decoders',
+  'standard_fonts',
+  'types',
+  'wasm',
+  'web',
+  'webpack.mjs',
+  'legacy/image_decoders',
+  'legacy/web',
+  'legacy/webpack.mjs',
+]) {
+  await rm(resolve(pdfjsRoot, name), { recursive: true, force: true })
+}
+for (const name of [
+  'pdf.d.mts',
+  'pdf.min.mjs',
+  'pdf.mjs.map',
+  'pdf.sandbox.min.mjs',
+  'pdf.sandbox.mjs',
+  'pdf.sandbox.mjs.map',
+  'pdf.worker.min.mjs',
+  'pdf.worker.mjs.map',
+]) {
+  await rm(resolve(pdfjsLegacyBuild, name), { force: true })
+}
 console.log(`desktop: prepared Host resources at ${projectRoot}`)

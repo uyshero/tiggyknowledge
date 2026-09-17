@@ -7,7 +7,7 @@ import type { KnowledgeDocument, KnowledgeDocumentMetadata, KnowledgeDocumentPre
 
 export const inject = ['clientApp', 'connection']
 
-interface DocumentPageState {
+export interface DocumentPageState {
   libraryId?: string
   documentId?: string
   location?: string
@@ -32,6 +32,26 @@ function routeState(value: unknown): DocumentPageState {
     ...(typeof input.documentId === 'string' ? { documentId: input.documentId } : {}),
     ...(typeof input.location === 'string' ? { location: input.location } : {}),
     ...(typeof input.query === 'string' ? { query: input.query } : {}),
+  }
+}
+
+export function shouldPublishDocumentRoute(
+  externalPageStateChanged: boolean,
+  current: DocumentPageState,
+  next: DocumentPageState,
+): boolean {
+  return !externalPageStateChanged && (
+    current.libraryId !== next.libraryId
+    || current.documentId !== next.documentId
+    || current.location !== next.location
+    || current.query !== next.query
+  )
+}
+
+export function selectedDocumentRoute(libraryId: string, documentId?: string): DocumentPageState {
+  return {
+    libraryId,
+    ...(documentId === undefined ? {} : { documentId }),
   }
 }
 
@@ -264,6 +284,13 @@ export function apply(ctx: Context): void {
     const [editMarkdown, setEditMarkdown] = useState(false)
     const [editSaving, setEditSaving] = useState(false)
     const [editError, setEditError] = useState<string>()
+    const lastPageStateRef = useRef(app.pageState)
+    const externalPageStateChanged = !Object.is(lastPageStateRef.current, app.pageState)
+    const pendingExternalRouteRef = useRef<DocumentPageState>()
+    if (externalPageStateChanged) {
+      lastPageStateRef.current = app.pageState
+      pendingExternalRouteRef.current = routeState(app.pageState)
+    }
 
     useEffect(() => {
       const controller = new AbortController()
@@ -278,11 +305,28 @@ export function apply(ctx: Context): void {
 
     useEffect(() => {
       const next = routeState(app.pageState)
-      if (next.libraryId !== undefined) setLibraryId(next.libraryId)
-      if (next.documentId !== undefined) setSelectedDocumentId(next.documentId)
-      if (next.location !== undefined) setTargetLocation(next.location)
-      if (next.query !== undefined) setTargetQuery(next.query)
+      setLibraryId(next.libraryId ?? '')
+      setSelectedDocumentId(next.documentId)
+      setTargetLocation(next.location)
+      setTargetQuery(next.query)
     }, [app.pageState])
+
+    useEffect(() => {
+      if (app.selectedPageId !== 'documents' || libraryId.length === 0) return
+      const current = routeState(app.pageState)
+      const next = {
+        libraryId,
+        ...(selectedDocumentId === undefined ? {} : { documentId: selectedDocumentId }),
+        ...(targetLocation === undefined ? {} : { location: targetLocation }),
+        ...(targetQuery === undefined ? {} : { query: targetQuery }),
+      }
+      const pendingExternalRoute = pendingExternalRouteRef.current
+      if (pendingExternalRoute !== undefined) {
+        if (!shouldPublishDocumentRoute(false, pendingExternalRoute, next)) pendingExternalRouteRef.current = undefined
+        return
+      }
+      if (shouldPublishDocumentRoute(false, current, next)) ctx.clientApp.updatePageState(next)
+    }, [app.pageState, app.selectedPageId, libraryId, selectedDocumentId, targetLocation, targetQuery])
 
     useEffect(() => {
       if (libraryId.length === 0) {
@@ -338,6 +382,7 @@ export function apply(ctx: Context): void {
     }, [preview, targetLocation])
 
     const selectLibrary = (id: string): void => {
+      ctx.clientApp.updatePageState(selectedDocumentRoute(id))
       setLibraryId(id)
       setSelectedDocumentId(undefined)
       setTargetLocation(undefined)
@@ -346,6 +391,7 @@ export function apply(ctx: Context): void {
     }
 
     const openDocument = (id: string): void => {
+      ctx.clientApp.updatePageState(selectedDocumentRoute(libraryId, id))
       setSelectedDocumentId(id)
       setTargetLocation(undefined)
       setTargetQuery(undefined)

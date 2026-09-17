@@ -1,0 +1,35 @@
+{
+  "name": "@tiggyknowledge/library-chat",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "workspace:^",
+    "@tiggyknowledge/catalog-sqlite": "workspace:^",
+    "@tiggyknowledge/chat-sqlite": "workspace:^",
+    "@tiggyknowledge/index-fts": "workspace:^",
+    "@tiggyknowledge/llm-client": "workspace:^",
+    "@tiggyknowledge/llm-credentials": "workspace:^",
+    "@tiggyknowledge/query": "workspace:^",
+    "@tiggyknowledge/settings-file": "workspace:^"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "workspace:^",
+    "@tiggyknowledge/catalog-sqlite": "workspace:^",
+    "@tiggyknowledge/chat-sqlite": "workspace:^",
+    "@tiggyknowledge/contracts": "workspace:^",
+    "@tiggyknowledge/index-fts": "workspace:^",
+    "@tiggyknowledge/llm-client": "workspace:^",
+    "@tiggyknowledge/llm-credentials": "workspace:^",
+    "@tiggyknowledge/query": "workspace:^",
+    "@tiggyknowledge/settings-file": "workspace:^"
+  }
+}

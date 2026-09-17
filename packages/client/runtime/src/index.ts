@@ -69,8 +69,15 @@ export interface SettingsPanelDefinition {
   order: number
 }
 
+export interface AppOverlayDefinition {
+  component: ComponentType
+  id: string
+  order: number
+}
+
 export interface ClientAppSnapshot {
   pages: PageDefinition[]
+  appOverlays: AppOverlayDefinition[]
   documentInspectors: DocumentInspectorDefinition[]
   libraryActions: LibraryActionDefinition[]
   settingsPanels: SettingsPanelDefinition[]
@@ -96,8 +103,9 @@ export class ClientAppService extends Service {
   private readonly documentInspectorDefinitions = new Map<string, DocumentInspectorDefinition>()
   private readonly libraryActionDefinitions = new Map<string, LibraryActionDefinition>()
   private readonly settingsPanelDefinitions = new Map<string, SettingsPanelDefinition>()
+  private readonly appOverlayDefinitions = new Map<string, AppOverlayDefinition>()
   private readonly listeners = new Set<() => void>()
-  private snapshotValue: ClientAppSnapshot = { pages: [], documentInspectors: [], libraryActions: [], settingsPanels: [], selectedPageId: undefined, pageState: undefined, revision: 0 }
+  private snapshotValue: ClientAppSnapshot = { pages: [], appOverlays: [], documentInspectors: [], libraryActions: [], settingsPanels: [], selectedPageId: undefined, pageState: undefined, revision: 0 }
 
   constructor(ctx: Context) {
     super(ctx, 'clientApp')
@@ -159,9 +167,24 @@ export class ClientAppService extends Service {
     }
   }
 
+  registerAppOverlay(overlay: AppOverlayDefinition): () => void {
+    if (this.appOverlayDefinitions.has(overlay.id)) throw new Error(`client-runtime: duplicate app overlay ${overlay.id}`)
+    this.appOverlayDefinitions.set(overlay.id, overlay)
+    this.publish()
+    return () => {
+      this.appOverlayDefinitions.delete(overlay.id)
+      this.publish()
+    }
+  }
+
   selectPage(id: string, pageState?: unknown): void {
     if (!this.pages.has(id)) return
     this.publish(id, pageState)
+  }
+
+  updatePageState(pageState: unknown): void {
+    if (Object.is(pageState, this.snapshotValue.pageState)) return
+    this.publish(this.snapshotValue.selectedPageId, pageState)
   }
 
   getSnapshot = (): ClientAppSnapshot => this.snapshotValue
@@ -190,6 +213,7 @@ export class ClientAppService extends Service {
       : pages[0]?.id
     this.snapshotValue = {
       pages,
+      appOverlays: [...this.appOverlayDefinitions.values()].sort((left, right) => left.order - right.order),
       documentInspectors: [...this.documentInspectorDefinitions.values()].sort((left, right) => left.order - right.order),
       libraryActions: [...this.libraryActionDefinitions.values()].sort((left, right) => left.order - right.order),
       settingsPanels: [...this.settingsPanelDefinitions.values()].sort((left, right) => left.order - right.order),

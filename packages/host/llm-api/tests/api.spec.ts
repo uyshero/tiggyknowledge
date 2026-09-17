@@ -5,31 +5,40 @@ import HttpRouter, { HttpError } from '@tiggyknowledge/http-router'
 import { describe, expect, it, vi } from 'vitest'
 import LlmApi from '../src/index.ts'
 
+const settings = {
+  providers: [{
+    id: 'test-provider',
+    name: '测试提供方',
+    baseUrl: 'https://llm.example/v1',
+    requestTimeoutMs: 5_000,
+    maxInputTokens: 10_000,
+    maxOutputTokens: 1_000,
+    models: [{ id: 'test-model', name: 'test-model', model: 'test-model' }],
+    apiKeyConfigured: true,
+    apiKeyPreview: 'sk-tes…alue',
+  }],
+  preferredModelId: 'test-model',
+}
+
 describe('LLM HTTP API plugin', () => {
   it('registers its own routes and contributes LLM system state', async () => {
     const ctx = new Context()
-    let enabled = false
-    const updateLlmIntegration = vi.fn((input: { enabled?: boolean }) => {
-      if (input.enabled !== undefined) enabled = input.enabled
-    })
+    const updateLlmIntegration = vi.fn()
     ctx.provide('settings', {
       updateLlmIntegration,
-      llmIntegration: (configured: boolean, preview?: string) => ({
-        enabled,
-        baseUrl: 'https://llm.example/v1',
-        model: 'test-model',
-        requestTimeoutMs: 5_000,
-        maxInputTokens: 10_000,
-        maxOutputTokens: 1_000,
-        apiKeyConfigured: configured,
-        ...(preview === undefined ? {} : { apiKeyPreview: preview }),
-      }),
+      llmIntegration: () => settings,
     })
     ctx.provide('llmCredentials', {
-      snapshot: () => ({ configured: true, preview: 'sk-tes…alue' }),
+      status: () => ({ configured: true, preview: 'sk-tes…alue' }),
       setApiKey: vi.fn(),
     })
-    ctx.provide('llmClient', { testConnection: vi.fn() })
+    const testConnection = vi.fn(async () => ({
+      ok: true,
+      providerId: 'test-provider',
+      model: 'test-model',
+      message: '连接成功，模型：test-model',
+    }))
+    ctx.provide('llmClient', { testConnection })
     ctx.provide('llmWiki', {
       status: () => ({ state: 'ready', llmConfigured: true, pageCount: 2, changes: { totalDocuments: 3, added: 0, updated: 0, deleted: 0 } }),
     })
@@ -39,7 +48,7 @@ describe('LLM HTTP API plugin', () => {
       await ctx.plugin(HttpRouter)
       await ctx.plugin(LlmApi)
       expect(ctx.httpRouter.snapshot()).toMatchObject({
-        llm: { enabled: false, model: 'test-model', apiKeyConfigured: true },
+        llm: { preferredModelId: 'test-model', providers: [{ id: 'test-provider', apiKeyConfigured: true }] },
       })
 
       server = createServer((request, response) => {
@@ -73,11 +82,20 @@ describe('LLM HTTP API plugin', () => {
       const update = await fetch(`${baseUrl}/api/settings/llm`, {
         method: 'PUT',
         headers: { 'content-type': 'application/json', origin: baseUrl },
-        body: JSON.stringify({ enabled: true }),
+        body: JSON.stringify({ preferredModelId: 'test-model' }),
       })
       expect(update.status).toBe(200)
-      await expect(update.json()).resolves.toMatchObject({ enabled: true, apiKeyConfigured: true })
-      expect(updateLlmIntegration).toHaveBeenCalledWith({ enabled: true })
+      await expect(update.json()).resolves.toMatchObject({ preferredModelId: 'test-model' })
+      expect(updateLlmIntegration).toHaveBeenCalledWith({ preferredModelId: 'test-model' })
+
+      const tested = await fetch(`${baseUrl}/api/settings/llm/test`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', origin: baseUrl },
+        body: JSON.stringify({ providerId: 'test-provider' }),
+      })
+      expect(tested.status).toBe(200)
+      await expect(tested.json()).resolves.toMatchObject({ ok: true, providerId: 'test-provider', model: 'test-model' })
+      expect(testConnection).toHaveBeenCalledOnce()
     } finally {
       if (server !== undefined) {
         await new Promise<void>((resolve, reject) => server?.close(error => error === undefined ? resolve() : reject(error)))

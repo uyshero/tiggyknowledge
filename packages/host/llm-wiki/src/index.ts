@@ -4,7 +4,7 @@ import type {} from '@tiggyknowledge/catalog-sqlite'
 import type {
   KnowledgeDocument,
   ConfirmWikiGenerationInput,
-  LlmIntegrationSettings,
+  LlmResolvedEndpoint,
   StartWikiGenerationInput,
   UpdateWikiPageInput,
   WikiChangeSummary,
@@ -22,6 +22,7 @@ import type {
   WikiSource,
   WikiStatus,
 } from '@tiggyknowledge/contracts'
+import { isLlmReady, resolveWikiLlmModel } from '@tiggyknowledge/contracts'
 import type { ChatCompletionResult } from '@tiggyknowledge/llm-client'
 import type {} from '@tiggyknowledge/llm-client'
 import type {} from '@tiggyknowledge/llm-credentials'
@@ -143,8 +144,7 @@ export class LlmWiki extends Service {
     const latest = this.ctx.wikiStorage.latestGeneration()
     const pageCount = this.ctx.wikiStorage.listPages().length
     const lastGeneratedAt = this.ctx.wikiStorage.lastGeneratedAt()
-    const credentials = this.ctx.llmCredentials.snapshot()
-    const settings = this.settings(credentials.configured, credentials.preview)
+    const settings = this.currentSettings()
     let state: WikiStatus['state']
     if (active?.state === 'planned') state = 'awaiting-confirmation'
     else if (active !== undefined) state = 'generating'
@@ -154,7 +154,7 @@ export class LlmWiki extends Service {
     else state = 'ready'
     return {
       state,
-      llmConfigured: settings.enabled && settings.model.length > 0 && credentials.configured,
+      llmConfigured: isLlmReady(settings),
       pageCount,
       ...(lastGeneratedAt === undefined ? {} : { lastGeneratedAt }),
       ...(active === undefined ? {} : { activeGenerationId: active.id }),
@@ -180,10 +180,7 @@ export class LlmWiki extends Service {
     if (this.ctx.wikiStorage.activeGeneration() !== undefined || this.activeController !== undefined) {
       throw new RangeError('已有 Wiki 生成任务正在运行')
     }
-    const settings = this.currentSettings()
-    if (!settings.enabled) throw new RangeError('LLM 集成尚未启用')
-    if (settings.model.trim().length === 0) throw new RangeError('尚未配置 LLM 模型')
-    this.ctx.llmCredentials.getApiKey()
+    const settings = this.wikiEndpoint()
 
     const estimate = this.estimate(input.mode)
     const needsSynthesis = input.mode !== 'incremental'
@@ -249,7 +246,7 @@ export class LlmWiki extends Service {
       || [...archiveSlugs].some(slug => !validArchiveSlugs.has(slug))) {
       throw new RangeError('Wiki 生成确认包含未知词条')
     }
-    const settings = this.currentSettings()
+    const settings = this.wikiEndpoint()
     const controller = this.activeController = new AbortController()
     const next = this.ctx.wikiStorage.updateGeneration(id, { state: 'pending', phase: 'confirmed' })
     void this.runGeneration(id, settings, controller, {
@@ -333,7 +330,7 @@ export class LlmWiki extends Service {
 
   private async runGeneration(
     id: string,
-    settings: LlmIntegrationSettings,
+    settings: LlmResolvedEndpoint,
     controller: AbortController,
     confirmed?: { candidates: EntryCandidate[], archiveSlugs: Set<string> },
   ): Promise<void> {
@@ -871,13 +868,18 @@ export class LlmWiki extends Service {
     }
   }
 
-  private settings(configured: boolean, preview?: string): LlmIntegrationSettings {
-    return this.ctx.settings.llmIntegration(configured, preview)
+  private currentSettings() {
+    return this.ctx.settings.llmIntegration(providerId => this.ctx.llmCredentials.status(providerId))
   }
 
-  private currentSettings(): LlmIntegrationSettings {
-    const credentials = this.ctx.llmCredentials.snapshot()
-    return this.settings(credentials.configured, credentials.preview)
+  private wikiEndpoint(): LlmResolvedEndpoint {
+    const endpoint = resolveWikiLlmModel(this.currentSettings())
+    if (endpoint === undefined || endpoint.model.trim().length === 0) {
+      throw new RangeError('尚未配置 Wiki 生成模型')
+    }
+    if (!endpoint.apiKeyConfigured) throw new RangeError('Wiki 生成模型尚未配置 API Key')
+    this.ctx.llmCredentials.getApiKey(endpoint.providerId)
+    return endpoint
   }
 }
 

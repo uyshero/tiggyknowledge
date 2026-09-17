@@ -17,6 +17,11 @@
       config:
         dataDir: !!js ctx.dataRoot
 
+    - id: chat-storage
+      name: '@tiggyknowledge/chat-sqlite'
+      config:
+        dataDir: !!js ctx.dataRoot
+
     - id: text-producer
       name: '@tiggyknowledge/producer-text'
 
@@ -95,6 +100,12 @@
     - id: llm-api
       name: '@tiggyknowledge/llm-api'
 
+    - id: library-chat
+      name: '@tiggyknowledge/library-chat'
+
+    - id: library-chat-api
+      name: '@tiggyknowledge/library-chat-api'
+
     - id: wiki-governance
       name: '@tiggyknowledge/wiki-governance'
       config:
@@ -134,6 +145,10 @@
             moduleName: '@tiggyknowledge/client-ui-documents'
             label: Documents
             description: Document list and preview workbench
+          - id: client-library-chat
+            moduleName: '@tiggyknowledge/client-library-chat'
+            label: Library Chat
+            description: Knowledge library grounded question answering
           - id: client-inspector-okf
             moduleName: '@tiggyknowledge/client-inspector-okf'
             label: OKF Inspector

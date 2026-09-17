@@ -29,6 +29,15 @@ export interface FtsSearchHit {
   score: number
 }
 
+export interface IndexedKnowledgeChunk {
+  chunkId: string
+  documentId: string
+  libraryId: string
+  location: string
+  title: string
+  body: string
+}
+
 interface SearchRow {
   chunk_id: string
   document_id: string
@@ -164,6 +173,27 @@ export class FtsIndex extends Service {
     }
   }
 
+  listDocumentChunks(documentId: string): IndexedKnowledgeChunk[] {
+    validateDocumentId(documentId)
+    const rows = this.requireDatabase().prepare(`
+      SELECT chunk_id, document_id, library_id, location, title, body
+      FROM knowledge_fts_v2
+      WHERE document_id = ?
+      ORDER BY
+        CASE WHEN chunk_id IS NULL OR chunk_id = '' OR chunk_id LIKE 'legacy-%' THEN 1 ELSE 0 END,
+        CASE WHEN chunk_id IS NULL OR chunk_id = '' OR chunk_id LIKE 'legacy-%' THEN NULL ELSE chunk_id END COLLATE BINARY,
+        rowid
+    `).all(documentId) as unknown as Array<Omit<ContainsRow, 'rank'>>
+    return rows.map(row => ({
+      chunkId: row.chunk_id,
+      documentId: row.document_id,
+      libraryId: row.library_id,
+      location: row.location,
+      title: row.title,
+      body: row.body,
+    }))
+  }
+
   search(input: FtsSearchInput): FtsSearchHit[] {
     const rawTerms = input.text.match(/\S+/g) ?? []
     if (rawTerms.some(term => [...term].length < 3)) return this.searchContains(input, rawTerms)
@@ -223,6 +253,12 @@ export class FtsIndex extends Service {
   private requireDatabase(): DatabaseSync {
     if (this.database === undefined) throw new Error('index-fts: database is not initialized')
     return this.database
+  }
+}
+
+function validateDocumentId(documentId: string): void {
+  if (typeof documentId !== 'string' || documentId.trim().length === 0 || documentId.length > 200) {
+    throw new RangeError('文档 ID 无效')
   }
 }
 

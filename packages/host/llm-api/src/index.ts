@@ -5,9 +5,11 @@ import type {
   RevertWikiPageInput,
   SetLlmApiKeyInput,
   StartWikiGenerationInput,
+  TestLlmConnectionInput,
   UpdateLlmIntegrationSettingsInput,
   UpdateWikiPageInput,
 } from '@tiggyknowledge/contracts'
+import { resolveLlmProviderModel } from '@tiggyknowledge/contracts'
 import { HttpError, type HttpRouteDefinition } from '@tiggyknowledge/http-router'
 import type {} from '@tiggyknowledge/llm-client'
 import type {} from '@tiggyknowledge/llm-credentials'
@@ -35,8 +37,7 @@ export class LlmApi extends Service {
   }
 
   llmSettings(): LlmIntegrationSettings {
-    const credentials = this.ctx.llmCredentials.snapshot()
-    return this.ctx.settings.llmIntegration(credentials.configured, credentials.preview)
+    return this.ctx.settings.llmIntegration(providerId => this.ctx.llmCredentials.status(providerId))
   }
 }
 
@@ -69,7 +70,7 @@ const ROUTES: Route[] = [
       assertSameOrigin()
       const input = await readJson<SetLlmApiKeyInput>()
       try {
-        this.ctx.llmCredentials.setApiKey(input.apiKey)
+        this.ctx.llmCredentials.setApiKey(input.providerId, input.apiKey)
         json(this.llmSettings())
       } catch (error) {
         if (error instanceof RangeError) throw new HttpError(400, 'invalid_llm_api_key', error.message)
@@ -81,9 +82,17 @@ const ROUTES: Route[] = [
     id: 'llm-settings:test',
     methods: ['POST'],
     path: '/api/settings/llm/test',
-    async handler({ assertSameOrigin, json }) {
+    async handler({ assertSameOrigin, json, readJson }) {
       assertSameOrigin()
-      json(await this.ctx.llmClient.testConnection({ ...this.llmSettings(), enabled: true }))
+      const input = await readJson<TestLlmConnectionInput>()
+      const endpoint = resolveLlmProviderModel(this.llmSettings(), input.providerId, input.modelId)
+      if (endpoint === undefined) throw new HttpError(400, 'invalid_llm_test', '请先保存提供方和要测试的模型')
+      try {
+        json(await this.ctx.llmClient.testConnection(endpoint))
+      } catch (error) {
+        if (error instanceof RangeError) throw new HttpError(400, 'invalid_llm_test', error.message)
+        throw error
+      }
     },
   },
   {

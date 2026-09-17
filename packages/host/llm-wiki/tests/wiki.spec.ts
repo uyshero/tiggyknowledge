@@ -144,8 +144,16 @@ describe('LLM Wiki generation', () => {
         error: '应用已重启，先前的 Wiki 生成任务未能完成',
       })
 
-      ctx.settings.updateLlmIntegration({ enabled: true, model: 'test-model' })
-      ctx.llmCredentials.setApiKey('sk-test-wiki-key')
+      ctx.settings.updateLlmIntegration({
+        providers: [{
+          id: 'test-provider',
+          name: '测试提供方',
+          baseUrl: 'https://llm.example.test/v1',
+          models: [{ id: 'test-model', model: 'test-model' }],
+        }],
+        preferredModelId: 'test-model',
+      })
+      ctx.llmCredentials.setApiKey('test-provider', 'sk-test-wiki-key')
       const library = ctx.knowledgeCatalog.createLibrary({ name: 'Wiki 测试库' })
       const bytes = new TextEncoder().encode('# 测试文档\n\n这是生成 Wiki 所需的事实。')
       const asset = ctx.knowledgeContent.save(bytes)
@@ -292,8 +300,16 @@ describe('LLM Wiki generation', () => {
       await ctx.plugin(WikiSqlite, { dataDir })
       ctx.provide('llmClient', { complete })
       await ctx.plugin(LlmWiki)
-      ctx.settings.updateLlmIntegration({ enabled: true, model: 'test-model' })
-      ctx.llmCredentials.setApiKey('sk-test-wiki-key')
+      ctx.settings.updateLlmIntegration({
+        providers: [{
+          id: 'test-provider',
+          name: '测试提供方',
+          baseUrl: 'https://llm.example.test/v1',
+          models: [{ id: 'test-model', model: 'test-model' }],
+        }],
+        preferredModelId: 'test-model',
+      })
+      ctx.llmCredentials.setApiKey('test-provider', 'sk-test-wiki-key')
       const library = ctx.knowledgeCatalog.createLibrary({ name: '增量测试库' })
       const createDocument = (title: string, content: string) => {
         const asset = ctx.knowledgeContent.save(new TextEncoder().encode(content))

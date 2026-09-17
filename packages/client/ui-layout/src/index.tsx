@@ -44,6 +44,10 @@ export function apply(ctx: Context): void {
           </nav>
         </aside>
         <main className="app-main">{Page === undefined ? <div className="boot-state">正在装配插件...</div> : <Page />}</main>
+        {snapshot.appOverlays.map(overlay => {
+          const Overlay = overlay.component
+          return <Overlay key={overlay.id} />
+        })}
       </div>
     )
   }

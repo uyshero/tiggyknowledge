@@ -5,20 +5,21 @@ import { applyLlmSettingsSnapshot } from '../src/index.tsx'
 describe('LLM settings panel state', () => {
   it('publishes saved settings to both the live system field and settings snapshot', () => {
     const previous: LlmIntegrationSettings = {
-      enabled: false,
-      baseUrl: 'https://old.example/v1',
-      model: 'old-model',
-      requestTimeoutMs: 60_000,
-      maxInputTokens: 10_000,
-      maxOutputTokens: 1_000,
-      apiKeyConfigured: false,
+      providers: [],
     }
     const next: LlmIntegrationSettings = {
-      ...previous,
-      enabled: true,
-      model: 'new-model',
-      apiKeyConfigured: true,
-      apiKeyPreview: 'sk-new…test',
+      providers: [{
+        id: 'openai-main',
+        name: 'OpenAI',
+        baseUrl: 'https://api.openai.com/v1',
+        requestTimeoutMs: 120_000,
+        maxInputTokens: 32_000,
+        maxOutputTokens: 4_096,
+        models: [{ id: 'gpt-mini', name: 'GPT Mini', model: 'gpt-4.1-mini' }],
+        apiKeyConfigured: true,
+        apiKeyPreview: 'sk-new…test',
+      }],
+      preferredModelId: 'gpt-mini',
     }
     const system = {
       product: 'tiggyknowledge',

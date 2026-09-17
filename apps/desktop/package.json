@@ -11,7 +11,9 @@
     "start": "electron .",
     "pack-resources": "node scripts/prepare.mjs",
     "package": "pnpm run pack-resources && electron-builder",
-    "package:mac": "pnpm run pack-resources && electron-builder --mac dmg zip --universal --publish never",
+    "package:mac": "pnpm run pack-resources && electron-builder --mac dmg zip --publish never",
+    "package:mac:x64": "pnpm run pack-resources && electron-builder --mac dmg zip --x64 --publish never",
+    "package:mac:arm64": "pnpm run pack-resources && electron-builder --mac dmg zip --arm64 --publish never",
     "package:win": "pnpm run pack-resources && electron-builder --win nsis --x64 --publish never"
   },
   "dependencies": {
@@ -52,7 +54,6 @@
     ],
     "mac": {
       "category": "public.app-category.productivity",
-      "x64ArchFiles": "Contents/Resources/project/node_modules/**/*.node",
       "target": [
         "dmg",
         "zip"
@@ -68,9 +69,13 @@
       "target": [
         "nsis"
       ],
+      "compression": "maximum",
+      "electronLanguages": [
+        "en-US",
+        "zh-CN"
+      ],
       "artifactName": "${productName}-Setup-${version}-win-${arch}.${ext}",
-      "icon": "build/icon.ico",
-      "signAndEditExecutable": false
+      "icon": "build/icon.ico"
     },
     "nsis": {
       "installerIcon": "build/icon.ico",

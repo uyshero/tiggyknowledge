@@ -20,6 +20,7 @@
     { "path": "./packages/client/ui-knowledge" },
     { "path": "./packages/client/ui-ingestion" },
     { "path": "./packages/client/ui-documents" },
+    { "path": "./packages/client/library-chat" },
     { "path": "./packages/client/ui-graph" },
     { "path": "./packages/client/ui-tags" },
     { "path": "./packages/client/ui-favorites" },

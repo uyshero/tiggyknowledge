@@ -55,4 +55,27 @@ describe('client runtime extension registries', () => {
       await ctx.fiber.dispose()
     }
   })
+
+  it('orders app overlays and updates active page state', async () => {
+    const ctx = new Context()
+    try {
+      await ctx.plugin(Loader)
+      await ctx.plugin(ClientAppService)
+      const component = (): null => null
+      const icon = (): null => null
+      ctx.clientApp.registerPage({ component, icon, id: 'documents', label: '条目', order: 10, section: 'primary' })
+      const disposeLater = ctx.clientApp.registerAppOverlay({ component, id: 'later', order: 20 })
+      const disposeFirst = ctx.clientApp.registerAppOverlay({ component, id: 'first', order: 10 })
+
+      ctx.clientApp.updatePageState({ libraryId: 'library-1', documentId: 'document-1' })
+
+      expect(ctx.clientApp.getSnapshot().appOverlays.map(overlay => overlay.id)).toEqual(['first', 'later'])
+      expect(ctx.clientApp.getSnapshot().pageState).toEqual({ libraryId: 'library-1', documentId: 'document-1' })
+      disposeFirst()
+      disposeLater()
+      expect(ctx.clientApp.getSnapshot().appOverlays).toEqual([])
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  })
 })

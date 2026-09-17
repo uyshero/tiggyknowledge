@@ -1,0 +1,20 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib/types"
+  },
+  "include": ["src"],
+  "references": [
+    { "path": "../../../vendor/cosmokit" },
+    { "path": "../../../vendor/cordis" },
+    { "path": "../../core/contracts" },
+    { "path": "../../storage/catalog-sqlite" },
+    { "path": "../../storage/chat-sqlite" },
+    { "path": "../index-fts" },
+    { "path": "../query" },
+    { "path": "../llm-client" },
+    { "path": "../../settings/llm-credentials" },
+    { "path": "../../settings/settings-file" }
+  ]
+}

@@ -38,9 +38,12 @@ jobs:
           - os: windows-latest
             command: desktop:win
             artifact: windows
-          - os: macos-14
-            command: desktop:mac
-            artifact: macos
+          - os: macos-15-intel
+            command: desktop:mac:x64
+            artifact: macos-x64
+          - os: macos-15
+            command: desktop:mac:arm64
+            artifact: macos-arm64
     runs-on: ${{ matrix.os }}
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: 'false'

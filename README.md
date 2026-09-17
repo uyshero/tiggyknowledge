@@ -18,6 +18,18 @@ Open `http://127.0.0.1:3210`. Runtime data is written under `app-data/`.
 The shipped Host composition is `packages/bundle/local/cordis.patch.yml`.
 Additional structural overrides can be supplied with `--patch <path>`.
 
+## Official website
+
+The marketing and documentation site lives in `apps/site` and is independent of
+the product Web UI.
+
+```sh
+pnpm site:dev
+```
+
+Open `http://127.0.0.1:4321`. Production builds set `SITE_BASE=/tiggyknowledge/`
+for GitHub Pages.
+
 ## Desktop client
 
 The Electron desktop shell reuses the Host and Web UI while keeping Node.js
