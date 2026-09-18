@@ -1,4 +1,5 @@
 import { Context, Service } from '@deepseek-ai/cordis'
+import { contributeSurface } from '@tiggyknowledge/plugin-surface'
 import type {} from '@tiggyknowledge/preview-text'
 import type {} from '@tiggyknowledge/producer-pdf'
 
@@ -27,6 +28,14 @@ export class PdfPreview extends Service {
         pageCount: extracted.pageCount,
       }
     }), 'preview-pdf: register')
+    contributeSurface(ctx, {
+      clients: [{
+        id: 'client-preview-pdf',
+        moduleName: '@tiggyknowledge/client-preview-pdf',
+        label: 'PDF Preview',
+        description: 'Visual PDF page renderer',
+      }],
+    })
   }
 }
 

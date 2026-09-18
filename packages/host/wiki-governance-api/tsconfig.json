@@ -9,6 +9,7 @@
     { "path": "../../../vendor/cordis" },
     { "path": "../../core/contracts" },
     { "path": "../http-router" },
+    { "path": "../plugin-surface" },
     { "path": "../wiki-governance" }
   ]
 }

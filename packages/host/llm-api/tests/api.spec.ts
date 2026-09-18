@@ -39,9 +39,6 @@ describe('LLM HTTP API plugin', () => {
       message: '连接成功，模型：test-model',
     }))
     ctx.provide('llmClient', { testConnection })
-    ctx.provide('llmWiki', {
-      status: () => ({ state: 'ready', llmConfigured: true, pageCount: 2, changes: { totalDocuments: 3, added: 0, updated: 0, deleted: 0 } }),
-    })
 
     let server: ReturnType<typeof createServer> | undefined
     try {
@@ -76,8 +73,7 @@ describe('LLM HTTP API plugin', () => {
       const baseUrl = `http://127.0.0.1:${address.port}`
 
       const status = await fetch(`${baseUrl}/api/wiki/status`)
-      expect(status.status).toBe(200)
-      await expect(status.json()).resolves.toMatchObject({ state: 'ready', pageCount: 2 })
+      expect(status.status).toBe(404)
 
       const update = await fetch(`${baseUrl}/api/settings/llm`, {
         method: 'PUT',

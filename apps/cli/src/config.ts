@@ -13,6 +13,12 @@ export interface ParsedArguments {
   help: boolean
 }
 
+export interface ComposeSource {
+  filename?: string
+  required?: boolean
+  patches?: PatchOptions[]
+}
+
 export function parseArguments(args: string[]): ParsedArguments {
   const patches: string[] = []
   let help = false
@@ -49,11 +55,19 @@ export function loadPatchFile(filename: string, required = true): PatchOptions[]
   return parsed as PatchOptions[]
 }
 
-export function composeEntries(files: { filename: string; required?: boolean }[]): EntryOptions[] {
-  const patches = files.flatMap(file => loadPatchFile(file.filename, file.required ?? true))
+export function composeEntries(sources: ComposeSource[]): EntryOptions[] {
+  const patches = sources.flatMap(source => {
+    if (source.patches !== undefined) return source.patches
+    if (source.filename === undefined) return []
+    return loadPatchFile(source.filename, source.required ?? true)
+  })
   return applyEntryPatches([], structuredClone(patches), (message, ...args) => {
     let offset = 0
     const detail = message.replace(/%C/g, () => JSON.stringify(args[offset++]))
     process.stderr.write(`tiggyknowledge: ${detail}\n`)
   })
+}
+
+export function bundleEntryIds(bundle: string): Set<string> {
+  return new Set(composeEntries([{ filename: bundle }]).map(entry => entry.id))
 }

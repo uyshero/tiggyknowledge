@@ -12,6 +12,8 @@
     { "path": "../../vendor/cosmokit" },
     { "path": "../../vendor/cordis" },
     { "path": "../../vendor/loader" },
-    { "path": "../../packages/core/contracts" }
+    { "path": "../../packages/core/contracts" },
+    { "path": "../../packages/client/runtime" },
+    { "path": "../../packages/client/connection" }
   ]
 }

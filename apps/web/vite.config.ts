@@ -12,6 +12,8 @@ export default defineConfig({
       { find: /^@deepseek-ai\/cosmokit$/, replacement: source('../../vendor/cosmokit/src/index.ts') },
       { find: /^@deepseek-ai\/cordis$/, replacement: source('../../vendor/cordis/src/index.ts') },
       { find: /^@deepseek-ai\/cordis-plugin-loader$/, replacement: source('../../vendor/loader/src/index.ts') },
+      { find: /^@tiggyknowledge\/client-runtime$/, replacement: source('../../packages/client/runtime/src/index.ts') },
+      { find: /^@tiggyknowledge\/client-connection$/, replacement: source('../../packages/client/connection/src/index.ts') },
     ],
   },
   define: {

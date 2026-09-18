@@ -47,5 +47,6 @@ To publish a new desktop version, follow the copy-ready commands in
 
 ## Planning
 
+- [third-party plugin standard](docs/third-party-plugins.md)
 - [deepseek harness integration plan](docs/deepseek-harness-integration-plan.md)
 - [vNext local/cloud plugin architecture](docs/vnext-local-cloud-plugin-architecture.md)

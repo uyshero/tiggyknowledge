@@ -9,20 +9,6 @@
     { "path": "../../../vendor/cosmokit" },
     { "path": "../../../vendor/cordis" },
     { "path": "../../core/contracts" },
-    { "path": "../../storage/catalog-sqlite" },
-    { "path": "../documents" },
-    { "path": "../document-metadata" },
-    { "path": "../ingestion-tags" },
-    { "path": "../note-creator" },
-    { "path": "../okf-export" },
-    { "path": "../preview-text" },
-    { "path": "../query" },
-    { "path": "../semantic-capabilities" },
-    { "path": "../http-router" },
-    { "path": "../../settings/settings-file" },
-    { "path": "../storage-manager" },
-    { "path": "../client-bootstrap" },
-    { "path": "../plugin-inventory" },
-    { "path": "../graph" }
+    { "path": "../http-router" }
   ]
 }

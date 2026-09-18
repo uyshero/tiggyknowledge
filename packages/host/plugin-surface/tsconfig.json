@@ -2,16 +2,14 @@
   "extends": "../../../tsconfig.base.json",
   "compilerOptions": {
     "rootDir": "src",
-    "outDir": "lib/types",
-    "jsx": "react-jsx",
-    "lib": ["ES2024", "DOM"]
+    "outDir": "lib/types"
   },
   "include": ["src"],
   "references": [
     { "path": "../../../vendor/cosmokit" },
     { "path": "../../../vendor/cordis" },
     { "path": "../../core/contracts" },
-    { "path": "../connection" },
-    { "path": "../runtime" }
+    { "path": "../client-bootstrap" },
+    { "path": "../http-router" }
   ]
 }

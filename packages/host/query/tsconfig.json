@@ -1,14 +1,36 @@
 {
   "extends": "../../../tsconfig.base.json",
-  "compilerOptions": { "rootDir": "src", "outDir": "lib/types" },
-  "include": ["src"],
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib/types"
+  },
+  "include": [
+    "src"
+  ],
   "references": [
-    { "path": "../../../vendor/cosmokit" },
-    { "path": "../../../vendor/cordis" },
-    { "path": "../../core/contracts" },
-    { "path": "../../storage/catalog-sqlite" },
-    { "path": "../document-metadata" },
-    { "path": "../index-fts" },
-    { "path": "../semantic-capabilities" }
+    {
+      "path": "../../../vendor/cosmokit"
+    },
+    {
+      "path": "../../../vendor/cordis"
+    },
+    {
+      "path": "../../core/contracts"
+    },
+    {
+      "path": "../../storage/catalog-sqlite"
+    },
+    {
+      "path": "../document-metadata"
+    },
+    {
+      "path": "../index-fts"
+    },
+    {
+      "path": "../semantic-capabilities"
+    },
+    {
+      "path": "../plugin-surface"
+    }
   ]
 }

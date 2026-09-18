@@ -31,7 +31,7 @@ describe('catalog-sqlite libraries', () => {
 
       expect(first).toMatchObject({ name: '研发资料', description: '项目规范', documentCount: 0 })
       expect(catalog.listLibraries().map(item => item.id)).toEqual([second.id, first.id])
-      expect(catalog.summary()).toMatchObject({ schemaVersion: 3, libraries: 2, documents: 0 })
+      expect(catalog.summary()).toMatchObject({ schemaVersion: 4, libraries: 2, documents: 0 })
     })
   })
 
@@ -106,7 +106,7 @@ describe('catalog-sqlite libraries', () => {
     try {
       const fiber = await ctx.plugin(CatalogSqlite, { dataDir })
       try {
-        expect(ctx.knowledgeCatalog.summary().schemaVersion).toBe(3)
+        expect(ctx.knowledgeCatalog.summary().schemaVersion).toBe(4)
         expect(ctx.knowledgeCatalog.listLibraries()).toMatchObject([{ id: 'legacy', name: '旧知识库', description: '' }])
       } finally {
         await fiber.dispose()

@@ -11,13 +11,22 @@
       "default": "./lib/index.js"
     }
   },
+  "dependencies": {
+    "js-yaml": "^4.1.0"
+  },
   "peerDependencies": {
     "@deepseek-ai/cordis": "workspace:^",
-    "@deepseek-ai/cordis-plugin-loader": "workspace:^"
+    "@deepseek-ai/cordis-plugin-include": "workspace:^",
+    "@deepseek-ai/cordis-plugin-loader": "workspace:^",
+    "@tiggyknowledge/plugin-surface": "workspace:^"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "workspace:^",
+    "@deepseek-ai/cordis-plugin-include": "workspace:^",
     "@deepseek-ai/cordis-plugin-loader": "workspace:^",
-    "@tiggyknowledge/contracts": "workspace:^"
+    "@tiggyknowledge/contracts": "workspace:^",
+    "@tiggyknowledge/http-router": "workspace:^",
+    "@tiggyknowledge/plugin-surface": "workspace:^",
+    "@types/js-yaml": "^4.0.9"
   }
 }

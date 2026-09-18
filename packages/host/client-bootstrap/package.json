@@ -12,10 +12,12 @@
     }
   },
   "peerDependencies": {
-    "@deepseek-ai/cordis": "workspace:^"
+    "@deepseek-ai/cordis": "workspace:^",
+    "@tiggyknowledge/http-router": "workspace:^"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "workspace:^",
-    "@tiggyknowledge/contracts": "workspace:^"
+    "@tiggyknowledge/contracts": "workspace:^",
+    "@tiggyknowledge/http-router": "workspace:^"
   }
 }

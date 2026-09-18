@@ -2,6 +2,7 @@ node_modules/
 **/lib/
 apps/web/dist/
 dist/
+examples/**/dist/
 .packaged/
 app-data/
 *.tsbuildinfo

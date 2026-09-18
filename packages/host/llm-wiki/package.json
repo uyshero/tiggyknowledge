@@ -18,16 +18,19 @@
     "@tiggyknowledge/llm-credentials": "workspace:^",
     "@tiggyknowledge/preview-text": "workspace:^",
     "@tiggyknowledge/settings-file": "workspace:^",
-    "@tiggyknowledge/wiki-sqlite": "workspace:^"
+    "@tiggyknowledge/wiki-sqlite": "workspace:^",
+    "@tiggyknowledge/plugin-surface": "workspace:^"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "workspace:^",
     "@tiggyknowledge/catalog-sqlite": "workspace:^",
     "@tiggyknowledge/contracts": "workspace:^",
+    "@tiggyknowledge/http-router": "workspace:^",
     "@tiggyknowledge/llm-client": "workspace:^",
     "@tiggyknowledge/llm-credentials": "workspace:^",
     "@tiggyknowledge/preview-text": "workspace:^",
     "@tiggyknowledge/settings-file": "workspace:^",
-    "@tiggyknowledge/wiki-sqlite": "workspace:^"
+    "@tiggyknowledge/wiki-sqlite": "workspace:^",
+    "@tiggyknowledge/plugin-surface": "workspace:^"
   }
 }

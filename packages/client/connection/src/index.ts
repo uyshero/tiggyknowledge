@@ -3,6 +3,7 @@ import type {
   ConfirmWikiGenerationInput,
   CreateKnowledgeLibraryInput,
   CreateKnowledgeNoteInput,
+  CreateKnowledgeUrlInput,
   CreateWikiIssueInput,
   DeleteKnowledgeLibraryResult,
   GenerateDshIntegrationAccessKeyResult,
@@ -12,18 +13,21 @@ import type {
   KnowledgeDocumentList,
   KnowledgeDocumentMetadata,
   KnowledgeDocumentPreview,
+  KnowledgeDocumentRevisionList,
   KnowledgeDocumentWithMetadata,
-  KnowledgeGraphQuery,
-  KnowledgeGraphResponse,
   KnowledgeLibrary,
   KnowledgeLibraryList,
   KnowledgeOkfMapping,
   KnowledgeQuery,
+  SetPluginEnabledResult,
   KnowledgeSearchResponse,
   KnowledgeTag,
   KnowledgeMetadataDocumentList,
   OpenDataDirectoryResult,
+  PluginInventoryEntry,
   RevertWikiPageInput,
+  UnlockWikiPageInput,
+  PublishWikiPageInput,
   KnowledgeTagList,
   LibraryChatSnapshot,
   LibraryChatStreamEvent,
@@ -41,6 +45,7 @@ import type {
   UpdateWikiIssueInput,
   WikiEstimate,
   WikiGeneration,
+  WikiInboxItem,
   WikiFolder,
   WikiPage,
   WikiPageRevision,
@@ -52,6 +57,7 @@ import type {
   UpdateDshIntegrationSettingsInput,
   UpdateKnowledgeDocumentTitleInput,
   UpdateKnowledgeMarkdownNoteInput,
+  UpdateKnowledgeUrlExtractedContentInput,
   UpdateKnowledgeLibraryInput,
   RenameKnowledgeTagInput,
 } from '@tiggyknowledge/contracts'
@@ -122,6 +128,16 @@ export class ConnectionService extends Service {
 
   async system(signal?: AbortSignal): Promise<SystemSnapshot> {
     return await this.request<SystemSnapshot>('/api/system', signal === undefined ? {} : { signal })
+  }
+
+  async setPluginEnabled(entryId: string, enabled: boolean, signal?: AbortSignal): Promise<PluginInventoryEntry> {
+    const result = await this.request<SetPluginEnabledResult>(`/api/plugins/${encodeURIComponent(entryId)}`, {
+      body: JSON.stringify({ enabled }),
+      headers: { 'content-type': 'application/json' },
+      method: 'PUT',
+      ...(signal === undefined ? {} : { signal }),
+    })
+    return result.plugin
   }
 
   async libraryChatSnapshot(libraryId: string, signal?: AbortSignal): Promise<LibraryChatSnapshot> {
@@ -248,6 +264,31 @@ export class ConnectionService extends Service {
 
   async cancelWikiGeneration(id: string, signal?: AbortSignal): Promise<WikiGeneration> {
     return await this.request<WikiGeneration>(`/api/wiki/generations/${encodeURIComponent(id)}/cancel`, {
+      method: 'POST',
+      ...(signal === undefined ? {} : { signal }),
+    })
+  }
+
+  async skipWikiInbox(documentId: string, signal?: AbortSignal): Promise<WikiInboxItem[]> {
+    return await this.request<WikiInboxItem[]>(`/api/wiki/inbox/${encodeURIComponent(documentId)}/skip`, {
+      method: 'POST',
+      ...(signal === undefined ? {} : { signal }),
+    })
+  }
+
+  async unlockWikiPage(id: string, input: UnlockWikiPageInput, signal?: AbortSignal): Promise<WikiPage> {
+    return await this.request<WikiPage>(`/api/wiki/pages/${encodeURIComponent(id)}/unlock`, {
+      body: JSON.stringify(input),
+      headers: { 'content-type': 'application/json' },
+      method: 'POST',
+      ...(signal === undefined ? {} : { signal }),
+    })
+  }
+
+  async publishWikiPage(id: string, input: PublishWikiPageInput, signal?: AbortSignal): Promise<WikiPage> {
+    return await this.request<WikiPage>(`/api/wiki/pages/${encodeURIComponent(id)}/publish`, {
+      body: JSON.stringify(input),
+      headers: { 'content-type': 'application/json' },
       method: 'POST',
       ...(signal === undefined ? {} : { signal }),
     })
@@ -383,6 +424,15 @@ export class ConnectionService extends Service {
     })
   }
 
+  async createUrl(libraryId: string, input: CreateKnowledgeUrlInput, signal?: AbortSignal): Promise<KnowledgeDocument> {
+    return await this.request<KnowledgeDocument>(`/api/libraries/${encodeURIComponent(libraryId)}/urls`, {
+      body: JSON.stringify(input),
+      headers: { 'content-type': 'application/json' },
+      method: 'POST',
+      ...(signal === undefined ? {} : { signal }),
+    })
+  }
+
   async ingestFiles(libraryId: string, files: File[], tagNames: string[] = [], signal?: AbortSignal): Promise<IngestionBatchResult> {
     const form = new FormData()
     for (const file of files) form.append('files', file, file.name)
@@ -424,11 +474,31 @@ export class ConnectionService extends Service {
     })
   }
 
+  async updateUrlExtractedContent(documentId: string, input: UpdateKnowledgeUrlExtractedContentInput, signal?: AbortSignal): Promise<KnowledgeDocument> {
+    return await this.request<KnowledgeDocument>(`/api/documents/${encodeURIComponent(documentId)}/url-content`, {
+      body: JSON.stringify(input),
+      headers: { 'content-type': 'application/json' },
+      method: 'PUT',
+      ...(signal === undefined ? {} : { signal }),
+    })
+  }
+
   async updateMarkdownNote(documentId: string, input: UpdateKnowledgeMarkdownNoteInput, signal?: AbortSignal): Promise<KnowledgeDocument> {
     return await this.request<KnowledgeDocument>(`/api/documents/${encodeURIComponent(documentId)}/markdown-note`, {
       body: JSON.stringify(input),
       headers: { 'content-type': 'application/json' },
       method: 'PUT',
+      ...(signal === undefined ? {} : { signal }),
+    })
+  }
+
+  async documentRevisions(documentId: string, signal?: AbortSignal): Promise<KnowledgeDocumentRevisionList> {
+    return await this.request<KnowledgeDocumentRevisionList>(`/api/documents/${encodeURIComponent(documentId)}/revisions`, signal === undefined ? {} : { signal })
+  }
+
+  async revertDocumentRevision(documentId: string, version: number, signal?: AbortSignal): Promise<KnowledgeDocument> {
+    return await this.request<KnowledgeDocument>(`/api/documents/${encodeURIComponent(documentId)}/revisions/${version}/revert`, {
+      method: 'POST',
       ...(signal === undefined ? {} : { signal }),
     })
   }
@@ -490,24 +560,6 @@ export class ConnectionService extends Service {
   async favoriteDocuments(signal?: AbortSignal): Promise<KnowledgeDocumentWithMetadata[]> {
     const result = await this.request<KnowledgeMetadataDocumentList>('/api/favorites', signal === undefined ? {} : { signal })
     return result.items
-  }
-
-  async graph(query: KnowledgeGraphQuery = {}, signal?: AbortSignal): Promise<KnowledgeGraphResponse> {
-    const params = new URLSearchParams()
-    if (typeof query.libraryId === 'string' && query.libraryId.length > 0) params.set('libraryId', query.libraryId)
-    if (typeof query.depth === 'number') params.set('depth', String(query.depth))
-    if (query.includeMissing === false) params.set('includeMissing', 'false')
-    const suffix = params.size > 0 ? `?${params.toString()}` : ''
-    return await this.request<KnowledgeGraphResponse>(`/api/graph${suffix}`, signal === undefined ? {} : { signal })
-  }
-
-  async documentGraph(documentId: string, query: Pick<KnowledgeGraphQuery, 'depth' | 'includeMissing' | 'libraryId'> = {}, signal?: AbortSignal): Promise<KnowledgeGraphResponse> {
-    const params = new URLSearchParams()
-    if (typeof query.libraryId === 'string' && query.libraryId.length > 0) params.set('libraryId', query.libraryId)
-    if (typeof query.depth === 'number') params.set('depth', String(query.depth))
-    if (query.includeMissing === false) params.set('includeMissing', 'false')
-    const suffix = params.size > 0 ? `?${params.toString()}` : ''
-    return await this.request<KnowledgeGraphResponse>(`/api/documents/${encodeURIComponent(documentId)}/graph${suffix}`, signal === undefined ? {} : { signal })
   }
 
   private async request<T>(path: string, init: RequestInit): Promise<T> {

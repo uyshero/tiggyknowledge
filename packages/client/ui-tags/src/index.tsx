@@ -130,6 +130,6 @@ export function apply(ctx: Context): void {
     icon: Tag,
     component: TagsPage,
     order: 19,
-    section: 'hidden',
+    section: 'tags',
   }), 'ui-tags: page')
 }

@@ -5,18 +5,18 @@ import { GITHUB_URL, PRODUCT_ENGLISH_NAME, PRODUCT_NAME } from '../constants'
 
 const FEATURES = [
   { id: '01', title: '本地优先', body: '文档和索引写在本机。默认不上传云端。' },
-  { id: '02', title: '全文检索', body: '按知识库搜索 Markdown、文本和 PDF。' },
-  { id: '03', title: '图谱与 Wiki', body: '看文档关系，生成带来源引用的 Wiki。' },
+  { id: '02', title: '全文检索', body: '按知识库搜索 Markdown、文本、PDF 和网页。' },
+  { id: '03', title: 'Wiki', body: '从知识库生成带来源引用的 Wiki。' },
   { id: '04', title: '智能体接口', body: '只读 HTTP API，不绑定单一 Agent。' },
-  { id: '05', title: '自定义插件', body: '自己写、快速装，立刻扩展。' },
+  { id: '05', title: '第三方插件', body: '按 Host / Client 契约扩展。内置能力不能关。' },
 ]
 
 const PLUGIN_SLOTS = ['parser', 'preview', 'index', 'ui', 'agent']
 
 const PLUGIN_STEPS = [
-  { id: '01', title: '自己写', body: '按 Host / Client 接口实现新格式、页面或接入。' },
-  { id: '02', title: '快速安装', body: '加入运行时并启用，设置里能看到状态。' },
-  { id: '03', title: '立刻扩展', body: '新能力出现在知识库，不必改内核、不用等发版。' },
+  { id: '01', title: '按标准写', body: 'Host 用 contributeSurface 挂路由和伴生 UI，Client 只注册扩展点。' },
+  { id: '02', title: '本地挂载', body: '用 profile 或 --patch 插入第三方包。内置插件用户不能关。' },
+  { id: '03', title: '可关可卸', body: '只有第三方条目能 disabled；关掉后路由和 UI 一起消失。' },
 ]
 
 const ROADMAP = [
@@ -37,7 +37,7 @@ export function HomePage(): JSX.Element {
           </div>
           <h1>本地优先的知识库。</h1>
           <p className="lede">
-            {PRODUCT_NAME} 把文档、检索、图谱和 Wiki 放在本机，并向智能体提供只读接口。能力按插件组装：你可以自定义插件，快速安装，立刻扩展。
+            {PRODUCT_NAME} 把文档、检索和 Wiki 放在本机，并向智能体提供只读接口。能力按插件组装；第三方插件按公开契约开发，内置能力不能关。
           </p>
           <div className="hero-actions">
             <Link className="button-dark" to="/download">
@@ -65,8 +65,8 @@ export function HomePage(): JSX.Element {
             <div className="preview-nav">
               <span className="active">知识库</span>
               <span>搜索</span>
-              <span>图谱</span>
               <span>Wiki</span>
+              <span>设置</span>
             </div>
             <div className="preview-status"><i />127.0.0.1:3210</div>
           </div>
@@ -104,10 +104,10 @@ export function HomePage(): JSX.Element {
       <section className="kernel">
         <div className="kernel-copy">
           <p className="eyebrow">PLUGIN KERNEL</p>
-          <h2>自定义插件，立刻扩展。</h2>
-          <p>解析、预览、检索、Wiki、界面和智能体接入都是插槽。写自己的插件或安装现成插件，装上即用，不必改内核。</p>
-          <Link className="text-link invert" to="/docs/features">
-            插件如何工作
+          <h2>第三方插件按契约扩展。</h2>
+          <p>解析、预览、检索、Wiki、界面和智能体接入都是插槽。第三方走同一套 Host / Client 标准；内置能力保持开启。</p>
+          <Link className="text-link invert" to="/docs/plugins">
+            插件开发标准
             <ArrowRight size={15} />
           </Link>
         </div>

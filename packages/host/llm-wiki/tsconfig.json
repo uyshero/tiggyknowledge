@@ -4,16 +4,39 @@
     "rootDir": "src",
     "outDir": "lib/types"
   },
-  "include": ["src"],
+  "include": [
+    "src"
+  ],
   "references": [
-    { "path": "../../../vendor/cosmokit" },
-    { "path": "../../../vendor/cordis" },
-    { "path": "../../core/contracts" },
-    { "path": "../../storage/catalog-sqlite" },
-    { "path": "../../storage/wiki-sqlite" },
-    { "path": "../../settings/settings-file" },
-    { "path": "../../settings/llm-credentials" },
-    { "path": "../preview-text" },
-    { "path": "../llm-client" }
+    {
+      "path": "../../../vendor/cosmokit"
+    },
+    {
+      "path": "../../../vendor/cordis"
+    },
+    {
+      "path": "../../core/contracts"
+    },
+    {
+      "path": "../../storage/catalog-sqlite"
+    },
+    {
+      "path": "../../storage/wiki-sqlite"
+    },
+    {
+      "path": "../../settings/settings-file"
+    },
+    {
+      "path": "../../settings/llm-credentials"
+    },
+    {
+      "path": "../preview-text"
+    },
+    {
+      "path": "../llm-client"
+    },
+    {
+      "path": "../plugin-surface"
+    }
   ]
 }

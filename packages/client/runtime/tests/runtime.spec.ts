@@ -78,4 +78,46 @@ describe('client runtime extension registries', () => {
       await ctx.fiber.dispose()
     }
   })
+
+  it('accepts a tags navigation section', async () => {
+    const ctx = new Context()
+    try {
+      await ctx.plugin(Loader)
+      await ctx.plugin(ClientAppService)
+      const component = (): null => null
+      const icon = (): null => null
+      ctx.clientApp.registerPage({ component, icon, id: 'tags', label: '全部标签', order: 19, section: 'tags' })
+      expect(ctx.clientApp.getSnapshot().pages).toEqual([
+        expect.objectContaining({ id: 'tags', section: 'tags' }),
+      ])
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  })
+
+  it('adds and removes client companions through syncPlugins', async () => {
+    const ctx = new Context()
+    try {
+      await ctx.plugin(Loader)
+      await ctx.plugin(ClientAppService)
+      ctx.loader.builtins.a = { apply() {} }
+      ctx.loader.builtins.b = { apply() {} }
+      ctx.clientApp.setClientModuleLoader(async plugin => {
+        if (plugin.moduleName === 'c') return { apply() {} }
+        throw new Error(`unexpected module ${plugin.moduleName}`)
+      })
+      await ctx.clientApp.syncPlugins([
+        { id: 'a', moduleName: 'a', label: 'A', description: '' },
+        { id: 'b', moduleName: 'b', label: 'B', description: '' },
+      ])
+      expect(ctx.clientApp.clientPlugins().map(plugin => plugin.entryId)).toEqual(['a', 'b'])
+      await ctx.clientApp.syncPlugins([
+        { id: 'a', moduleName: 'a', label: 'A', description: '' },
+        { id: 'c', moduleName: 'c', label: 'C', description: '' },
+      ])
+      expect(ctx.clientApp.clientPlugins().map(plugin => plugin.entryId)).toEqual(['a', 'c'])
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  })
 })

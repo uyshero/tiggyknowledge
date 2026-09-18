@@ -202,13 +202,13 @@ export function apply(ctx: Context): void {
               <input placeholder="记录需要后续处理的问题" value={issueDescription} onChange={event => setIssueDescription(event.target.value)} />
               <button className="primary-button" disabled={busy || issueDescription.trim() === ''} onClick={() => void createIssue()}><Plus size={14} />添加</button>
             </section>
-            {issues.length === 0 ? <Empty text="还没有人工标记的问题。" /> : <div className="governance-list">{issues.map(issue => <article key={issue.id}><div><strong>{issue.pageTitle}</strong><span>{ISSUE_LABELS[issue.type]} · {issue.status === 'open' ? '待处理' : '已解决'}</span><p>{issue.description}</p></div><button className="secondary-button" disabled={busy} onClick={() => void resolveIssue(issue)}><CheckCircle2 size={14} />{issue.status === 'open' ? '标记解决' : '重新打开'}</button></article>)}</div>}
+            {issues.length === 0 ? <Empty text="还没有人工标记的问题。" /> : <div className="governance-list">{issues.map(issue => <article key={issue.id}><div><strong>{issue.pageTitle}</strong><span>{ISSUE_LABELS[issue.type]} · {issue.status === 'open' ? '待处理' : '已解决'}</span><p>{issue.description}</p></div><div className="governance-actions"><button className="secondary-button" onClick={() => ctx.clientApp.selectPage('wiki', { pageId: issue.pageId })}>查看页面</button><button className="secondary-button" disabled={busy} onClick={() => void resolveIssue(issue)}><CheckCircle2 size={14} />{issue.status === 'open' ? '标记解决' : '重新打开'}</button></div></article>)}</div>}
           </main>
         )}
 
         {tab === 'lint' && (
           <main className="governance-panel">
-            {findings.length === 0 ? <Empty text="未发现 Wiki 结构问题。" /> : <div className="governance-list">{findings.map(item => <article key={item.id}><div><strong>{item.pageTitle}</strong><span>{item.severity === 'warning' ? '警告' : '建议'} · {item.type}</span><p>{item.message}</p></div><button className="secondary-button" onClick={() => ctx.clientApp.selectPage('wiki')}>查看页面</button></article>)}</div>}
+            {findings.length === 0 ? <Empty text="未发现 Wiki 结构问题。" /> : <div className="governance-list">{findings.map(item => <article key={item.id}><div><strong>{item.pageTitle}</strong><span>{item.severity === 'warning' ? '警告' : '建议'} · {item.type}</span><p>{item.message}</p></div><button className="secondary-button" onClick={() => ctx.clientApp.selectPage('wiki', { pageId: item.pageId })}>查看页面</button></article>)}</div>}
           </main>
         )}
 

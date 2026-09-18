@@ -13,13 +13,14 @@
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "workspace:^",
-    "@tiggyknowledge/http-router": "workspace:^",
+    "@tiggyknowledge/plugin-surface": "workspace:^",
     "@tiggyknowledge/wiki-governance": "workspace:^"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "workspace:^",
     "@tiggyknowledge/contracts": "workspace:^",
     "@tiggyknowledge/http-router": "workspace:^",
+    "@tiggyknowledge/plugin-surface": "workspace:^",
     "@tiggyknowledge/wiki-governance": "workspace:^"
   }
 }

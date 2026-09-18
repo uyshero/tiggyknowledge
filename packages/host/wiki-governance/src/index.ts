@@ -15,6 +15,8 @@ import type {
   WikiPageSummary,
 } from '@tiggyknowledge/contracts'
 import type {} from '@tiggyknowledge/wiki-sqlite'
+import { contributeSurface } from '@tiggyknowledge/plugin-surface'
+import { wikiGovernanceHttpRoutes } from './http.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -45,6 +47,15 @@ export class WikiGovernance extends Service {
   constructor(ctx: Context, config: Config) {
     super(ctx, 'wikiGovernance')
     this.databasePath = resolve(config.dataDir, 'wiki-governance.sqlite')
+    contributeSurface(ctx, {
+      clients: [{
+        id: 'client-wiki-governance',
+        moduleName: '@tiggyknowledge/client-wiki-governance',
+        label: 'Wiki Governance',
+        description: 'Personal wiki versions, issues, lint, and recycle bin',
+      }],
+      routes: wikiGovernanceHttpRoutes(this),
+    })
   }
 
   async *[Service.init](): AsyncGenerator<() => void> {
@@ -207,5 +218,7 @@ function normalizedText(value: unknown, label: string, minimum: number, maximum:
   if (result.length < minimum || result.length > maximum) throw new RangeError(`${label}长度无效`)
   return result
 }
+
+export { wikiGovernanceHttpRoutes, type WikiGovernanceHttpHost } from './http.ts'
 
 export default WikiGovernance

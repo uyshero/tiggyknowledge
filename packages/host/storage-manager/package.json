@@ -5,14 +5,21 @@
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/types/index.d.ts",
-  "exports": { ".": { "types": "./lib/types/index.d.ts", "default": "./lib/index.js" } },
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    }
+  },
   "peerDependencies": {
     "@deepseek-ai/cordis": "workspace:^",
-    "@tiggyknowledge/catalog-sqlite": "workspace:^"
+    "@tiggyknowledge/catalog-sqlite": "workspace:^",
+    "@tiggyknowledge/plugin-surface": "workspace:^"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "workspace:^",
     "@tiggyknowledge/catalog-sqlite": "workspace:^",
-    "@tiggyknowledge/contracts": "workspace:^"
+    "@tiggyknowledge/contracts": "workspace:^",
+    "@tiggyknowledge/plugin-surface": "workspace:^"
   }
 }

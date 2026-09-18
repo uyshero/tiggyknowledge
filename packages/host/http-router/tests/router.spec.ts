@@ -99,4 +99,35 @@ describe('HTTP plugin router', () => {
       await ctx.fiber.dispose()
     }
   })
+
+  it('allows different methods on the same path from separate plugins', async () => {
+    const ctx = new Context()
+    try {
+      await ctx.plugin(HttpRouter)
+      ctx.httpRouter.register({
+        id: 'library:update',
+        methods: ['PUT'],
+        path: /^\/api\/libraries\/([^/]+)$/,
+        handler: ({ json, match }) => json({ action: 'update', id: match?.[1] }),
+      })
+      ctx.httpRouter.register({
+        id: 'library:delete',
+        methods: ['DELETE'],
+        path: /^\/api\/libraries\/([^/]+)$/,
+        handler: ({ json, match }) => json({ action: 'delete', id: match?.[1] }),
+      })
+      const baseUrl = await listen(ctx)
+      const updated = await fetch(`${baseUrl}/api/libraries/one`, { method: 'PUT' })
+      expect(updated.status).toBe(200)
+      await expect(updated.json()).resolves.toEqual({ action: 'update', id: 'one' })
+      const deleted = await fetch(`${baseUrl}/api/libraries/one`, { method: 'DELETE' })
+      expect(deleted.status).toBe(200)
+      await expect(deleted.json()).resolves.toEqual({ action: 'delete', id: 'one' })
+      const rejected = await fetch(`${baseUrl}/api/libraries/one`)
+      expect(rejected.status).toBe(405)
+      expect(rejected.headers.get('allow')?.split(', ').sort()).toEqual(['DELETE', 'PUT'])
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  })
 })

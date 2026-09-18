@@ -5,6 +5,7 @@ import type {} from '@tiggyknowledge/catalog-sqlite'
 import type {} from '@tiggyknowledge/content-local'
 import type { KnowledgeDocumentSourceType } from '@tiggyknowledge/contracts'
 import type {} from '@tiggyknowledge/okf'
+import { contributeSurface, httpFromRange, pathSegment } from '@tiggyknowledge/plugin-surface'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -34,6 +35,7 @@ function markdown(frontmatter: Record<string, unknown>, body: string): string {
 function referenceExtension(sourceType: KnowledgeDocumentSourceType): string {
   if (sourceType === 'pdf') return '.pdf'
   if (sourceType === 'markdown') return '.markdown.txt'
+  if (sourceType === 'url') return '.url.txt'
   return '.txt'
 }
 
@@ -80,10 +82,43 @@ function createZip(files: Zippable): Promise<Uint8Array> {
 }
 
 export class KnowledgeOkfExport extends Service {
-  static inject = ['knowledgeCatalog', 'knowledgeContent', 'knowledgeOkf']
+  static inject = ['knowledgeCatalog', 'knowledgeContent']
 
   constructor(ctx: Context) {
     super(ctx, 'knowledgeOkfExport')
+    ctx.inject(['knowledgeOkf'], ctx => {
+      contributeSurface(ctx, {
+        clients: [{
+          id: 'client-action-okf-export',
+          moduleName: '@tiggyknowledge/client-action-okf-export',
+          label: 'OKF Export',
+          description: 'Knowledge library OKF Bundle export action',
+        }],
+        routes: [{
+          id: 'okf:bundle',
+          methods: ['GET'],
+          path: /^\/api\/libraries\/([^/]+)\/okf-bundle$/,
+          handler: async ({ response, match }) => {
+            try {
+              const bundle = await this.exportLibrary(pathSegment(match))
+              response.writeHead(200, {
+                'cache-control': 'private, no-store',
+                'content-disposition': `attachment; filename="tiggyknowledge-okf.zip"; filename*=UTF-8''${encodeURIComponent(bundle.filename)}`,
+                'content-length': bundle.bytes.byteLength,
+                'content-type': 'application/zip',
+                'x-content-type-options': 'nosniff',
+                'x-okf-concepts': String(bundle.validation.conceptFiles),
+                'x-okf-validation': bundle.validation.status,
+                'x-okf-version': bundle.validation.okfVersion,
+              })
+              response.end(Buffer.from(bundle.bytes))
+            } catch (error) {
+              throw httpFromRange(error, 'library_not_found')
+            }
+          },
+        }],
+      })
+    })
   }
 
   async exportLibrary(libraryId: string): Promise<OkfBundleExport> {

@@ -4,10 +4,14 @@ export type PluginFace = 'host' | 'client'
 
 export type PluginPhase = 'pending' | 'loading' | 'active' | 'failed' | 'unloading' | 'disabled'
 
+export type PluginOrigin = 'builtin' | 'third-party'
+
 export interface PluginInventoryEntry {
   entryId: string
   moduleName: string
   face: PluginFace
+  origin: PluginOrigin
+  disableable: boolean
   enabled: boolean
   phase: PluginPhase
 }
@@ -17,6 +21,36 @@ export interface ClientPluginDescriptor {
   moduleName: string
   label: string
   description: string
+  url?: string
+}
+
+export interface ExternalPluginRecord {
+  id: string
+  packageName: string
+  directory: string
+  hostEntry: string
+  clientFile?: string
+  config: Record<string, unknown>
+}
+
+export function hostPluginOrigin(entryId: string, builtinIds?: ReadonlySet<string>): PluginOrigin {
+  return builtinIds === undefined || builtinIds.has(entryId) ? 'builtin' : 'third-party'
+}
+
+export function clientPluginOrigin(moduleName: string): PluginOrigin {
+  return moduleName.startsWith('@tiggyknowledge/') ? 'builtin' : 'third-party'
+}
+
+export function pluginDisableable(origin: PluginOrigin): boolean {
+  return origin === 'third-party'
+}
+
+export interface SetPluginEnabledInput {
+  enabled: boolean
+}
+
+export interface SetPluginEnabledResult {
+  plugin: PluginInventoryEntry
 }
 
 export interface ClientBootManifest {
@@ -64,7 +98,7 @@ export interface DeleteKnowledgeLibraryResult {
   deletedDocumentIds: string[]
 }
 
-export type KnowledgeDocumentSourceType = 'text' | 'markdown' | 'pdf'
+export type KnowledgeDocumentSourceType = 'text' | 'markdown' | 'pdf' | 'url'
 export type KnowledgeDocumentIndexStatus = 'pending' | 'ready' | 'failed'
 
 export interface KnowledgeDocument {
@@ -92,6 +126,7 @@ export interface KnowledgeDocumentPreview {
   format: KnowledgeDocumentSourceType
   truncated: boolean
   pageCount?: number
+  sourceUrl?: string
 }
 
 export interface KnowledgeOkfSource {
@@ -178,7 +213,26 @@ export interface UpdateKnowledgeDocumentTitleInput {
 export interface UpdateKnowledgeMarkdownNoteInput {
   title: string
   body: string
-  tagNames: string[]
+  tagNames?: string[]
+}
+
+export interface UpdateKnowledgeUrlExtractedContentInput {
+  title?: string
+  text: string
+}
+
+export interface KnowledgeDocumentRevision {
+  documentId: string
+  version: number
+  title: string
+  body: string
+  createdAt: string
+}
+
+export interface KnowledgeDocumentRevisionList {
+  documentId: string
+  currentVersion: number
+  items: KnowledgeDocumentRevision[]
 }
 
 export interface RenameKnowledgeTagInput {
@@ -207,6 +261,12 @@ export interface IngestionBatchResult {
 export interface CreateKnowledgeNoteInput {
   title: string
   body: string
+  tagNames: string[]
+}
+
+export interface CreateKnowledgeUrlInput {
+  url: string
+  title?: string
   tagNames: string[]
 }
 
@@ -489,7 +549,7 @@ export function isLlmReady(settings: LlmIntegrationSettings): boolean {
   return endpoint !== undefined && endpoint.apiKeyConfigured && endpoint.model.trim().length > 0
 }
 
-export type WikiGenerationMode = 'initial' | 'incremental' | 'rebuild'
+export type WikiGenerationMode = 'initial' | 'incremental' | 'rebuild' | 'document'
 export type WikiGenerationState = 'pending' | 'running' | 'planned' | 'completed' | 'failed' | 'cancelled'
 export type WikiState = 'never-generated' | 'ready' | 'stale' | 'generating' | 'awaiting-confirmation' | 'failed'
 export type WikiSectionState = 'ready' | 'stale' | 'source-missing' | 'locked'
@@ -567,6 +627,22 @@ export interface WikiFolder {
   order: number
 }
 
+export type WikiInboxChange = 'added' | 'updated'
+
+export interface WikiInboxItem {
+  documentId: string
+  libraryId: string
+  libraryName: string
+  title: string
+  contentHash: string
+  change: WikiInboxChange
+  locked: boolean
+}
+
+export interface WikiSkippedItem extends WikiInboxItem {
+  skippedAt: string
+}
+
 export interface WikiStatus {
   state: WikiState
   llmConfigured: boolean
@@ -575,6 +651,10 @@ export interface WikiStatus {
   activeGenerationId?: string
   lastGeneration?: WikiGeneration
   changes: WikiChangeSummary
+  inbox: WikiInboxItem[]
+  reviews: WikiPageSummary[]
+  skipped: WikiSkippedItem[]
+  queuedDocumentIds: string[]
 }
 
 export interface WikiEstimate {
@@ -626,13 +706,16 @@ export interface WikiGenerationCandidate {
 
 export interface WikiGenerationPlan {
   documentFingerprint: string
+  documentId?: string
   candidates: WikiGenerationCandidate[]
   archivePages: Array<Pick<WikiPageSummary, 'id' | 'slug' | 'title' | 'pageType' | 'purpose'>>
   preservedPageCount: number
 }
 
 export interface StartWikiGenerationInput {
-  mode: WikiGenerationMode
+  mode?: WikiGenerationMode
+  documentId?: string
+  force?: boolean
 }
 
 export interface ConfirmWikiGenerationInput {
@@ -665,6 +748,14 @@ export interface WikiPageRevision {
   sections: WikiSection[]
   editSource: WikiEditSource
   editedAt: string
+}
+
+export interface UnlockWikiPageInput {
+  expectedVersion: number
+}
+
+export interface PublishWikiPageInput {
+  expectedVersion: number
 }
 
 export interface RevertWikiPageInput {
@@ -735,7 +826,7 @@ export interface DshKnowledgeStatus {
   capabilities: {
     search: true
     read: true
-    okf: true
+    okf: boolean
     write: false
   }
 }

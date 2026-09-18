@@ -2,8 +2,11 @@ import { Context, Service } from '@deepseek-ai/cordis'
 import type {} from '@tiggyknowledge/catalog-sqlite'
 import type {} from '@tiggyknowledge/chunker-basic'
 import type {} from '@tiggyknowledge/content-local'
-import type { DeleteKnowledgeDocumentsResult, DeleteKnowledgeLibraryResult, KnowledgeDocument, KnowledgeDocumentList, UpdateKnowledgeDocumentTitleInput, UpdateKnowledgeMarkdownNoteInput } from '@tiggyknowledge/contracts'
+import type {} from '@tiggyknowledge/document-metadata'
+import type { DeleteKnowledgeDocumentsInput, DeleteKnowledgeDocumentsResult, DeleteKnowledgeLibraryResult, KnowledgeDocument, KnowledgeDocumentList, KnowledgeDocumentRevisionList, UpdateKnowledgeDocumentTitleInput, UpdateKnowledgeMarkdownNoteInput, UpdateKnowledgeUrlExtractedContentInput } from '@tiggyknowledge/contracts'
 import type {} from '@tiggyknowledge/index-fts'
+import { contributeSurface, httpFromRange, pathSegment } from '@tiggyknowledge/plugin-surface'
+import { composeUrlIndexBody, parseShortcutUrl } from '@tiggyknowledge/producer-url'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -11,11 +14,151 @@ declare module '@deepseek-ai/cordis' {
   }
 }
 
+const MAX_DOCUMENT_JSON_BODY_BYTES = 800 * 1024
+
 export class KnowledgeDocuments extends Service {
-  static inject = ['knowledgeCatalog', 'knowledgeContent', 'knowledgeChunker', 'knowledgeIndex']
+  static inject = ['knowledgeCatalog', 'knowledgeContent', 'knowledgeChunker', 'knowledgeIndex', 'knowledgeMetadata']
 
   constructor(ctx: Context) {
     super(ctx, 'knowledgeDocuments')
+    contributeSurface(ctx, {
+      clients: [{
+        id: 'client-ui-documents',
+        moduleName: '@tiggyknowledge/client-ui-documents',
+        label: 'Documents',
+        description: 'Document list and preview workbench',
+      }],
+      routes: [
+        {
+          id: 'documents:delete-library',
+          methods: ['DELETE'],
+          path: /^\/api\/libraries\/([^/]+)$/,
+          handler: ({ assertSameOrigin, json, match }) => {
+            assertSameOrigin()
+            try {
+              json(this.deleteLibrary(pathSegment(match)))
+            } catch (error) {
+              throw httpFromRange(error, 'library_not_found')
+            }
+          },
+        },
+        {
+          id: 'documents:list',
+          methods: ['GET'],
+          path: /^\/api\/libraries\/([^/]+)\/documents$/,
+          handler: ({ json, match }) => {
+            try {
+              json(this.list(pathSegment(match)))
+            } catch (error) {
+              throw httpFromRange(error, 'library_not_found')
+            }
+          },
+        },
+        {
+          id: 'documents:content',
+          methods: ['GET'],
+          path: /^\/api\/documents\/([^/]+)\/content$/,
+          handler: ({ response, match }) => {
+            try {
+              const source = this.source(pathSegment(match))
+              const contentType = source.document.sourceType === 'pdf'
+                ? 'application/pdf'
+                : source.document.sourceType === 'markdown'
+                  ? 'text/markdown; charset=utf-8'
+                  : 'text/plain; charset=utf-8'
+              response.writeHead(200, {
+                'cache-control': 'private, no-store',
+                'content-disposition': `inline; filename*=UTF-8''${encodeURIComponent(source.document.originalName)}`,
+                'content-length': source.bytes.byteLength,
+                'content-type': contentType,
+                'x-content-type-options': 'nosniff',
+              })
+              response.end(Buffer.from(source.bytes))
+            } catch (error) {
+              throw httpFromRange(error, 'document_not_found')
+            }
+          },
+        },
+        {
+          id: 'documents:title',
+          methods: ['PUT'],
+          path: /^\/api\/documents\/([^/]+)\/title$/,
+          handler: async ({ assertSameOrigin, json, match, readJson }) => {
+            assertSameOrigin()
+            try {
+              json(this.updateTitle(pathSegment(match), await readJson<UpdateKnowledgeDocumentTitleInput>()))
+            } catch (error) {
+              throw httpFromRange(error, 'invalid_document')
+            }
+          },
+        },
+        {
+          id: 'documents:url-content',
+          methods: ['PUT'],
+          path: /^\/api\/documents\/([^/]+)\/url-content$/,
+          handler: async ({ assertSameOrigin, json, match, readJson }) => {
+            assertSameOrigin()
+            try {
+              json(this.updateUrlExtractedContent(pathSegment(match), await readJson<UpdateKnowledgeUrlExtractedContentInput>(MAX_DOCUMENT_JSON_BODY_BYTES)))
+            } catch (error) {
+              throw httpFromRange(error, 'invalid_document')
+            }
+          },
+        },
+        {
+          id: 'documents:markdown-note',
+          methods: ['PUT'],
+          path: /^\/api\/documents\/([^/]+)\/markdown-note$/,
+          handler: async ({ assertSameOrigin, json, match, readJson }) => {
+            assertSameOrigin()
+            try {
+              json(this.updateMarkdownNote(pathSegment(match), await readJson<UpdateKnowledgeMarkdownNoteInput>(MAX_DOCUMENT_JSON_BODY_BYTES)))
+            } catch (error) {
+              throw httpFromRange(error, 'invalid_document')
+            }
+          },
+        },
+        {
+          id: 'documents:revert-revision',
+          methods: ['POST'],
+          path: /^\/api\/documents\/([^/]+)\/revisions\/(\d+)\/revert$/,
+          handler: ({ assertSameOrigin, json, match }) => {
+            assertSameOrigin()
+            try {
+              json(this.revertRevision(pathSegment(match), Number(match?.[2])))
+            } catch (error) {
+              throw httpFromRange(error, 'invalid_revision')
+            }
+          },
+        },
+        {
+          id: 'documents:revisions',
+          methods: ['GET'],
+          path: /^\/api\/documents\/([^/]+)\/revisions$/,
+          handler: ({ json, match }) => {
+            try {
+              json(this.listRevisions(pathSegment(match)))
+            } catch (error) {
+              throw httpFromRange(error, 'document_not_found')
+            }
+          },
+        },
+        {
+          id: 'documents:delete',
+          methods: ['POST'],
+          path: '/api/documents/delete',
+          handler: async ({ assertSameOrigin, json, readJson }) => {
+            assertSameOrigin()
+            const input = await readJson<DeleteKnowledgeDocumentsInput>()
+            try {
+              json(this.delete(Array.isArray(input.ids) ? input.ids : []))
+            } catch (error) {
+              throw httpFromRange(error, 'invalid_delete')
+            }
+          },
+        },
+      ],
+    })
   }
 
   list(libraryId: string): KnowledgeDocumentList {
@@ -39,12 +182,37 @@ export class KnowledgeDocuments extends Service {
     return document
   }
 
+  listRevisions(documentId: string): KnowledgeDocumentRevisionList {
+    const document = this.ctx.knowledgeCatalog.getDocuments([documentId])[0]
+    if (document === undefined) throw new RangeError('知识条目不存在')
+    const items = this.ctx.knowledgeCatalog.listDocumentRevisions(documentId)
+    return {
+      documentId,
+      currentVersion: (items[0]?.version ?? 0) + 1,
+      items,
+    }
+  }
+
+  revertRevision(documentId: string, version: number): KnowledgeDocument {
+    const revision = this.ctx.knowledgeCatalog.getDocumentRevision(documentId, version)
+    return this.updateMarkdownNote(documentId, { title: revision.title, body: revision.body })
+  }
+
   updateMarkdownNote(documentId: string, input: UpdateKnowledgeMarkdownNoteInput): KnowledgeDocument {
     const title = validateTitle(input.title)
     const body = validateBody(input.body)
     const document = this.ctx.knowledgeCatalog.getDocuments([documentId])[0]
     if (document === undefined) throw new RangeError('知识条目不存在')
     if (document.sourceType !== 'markdown') throw new RangeError('只有 Markdown 知识条目支持内容编辑')
+    const previous = parseMarkdownNote(new TextDecoder('utf-8').decode(this.ctx.knowledgeContent.read(document.sourceAssetId)))
+    if (previous.title !== title || previous.body !== body) {
+      this.ctx.knowledgeCatalog.addDocumentRevision({
+        documentId,
+        title: previous.title || document.title,
+        body: previous.body,
+        sourceAssetId: document.sourceAssetId,
+      })
+    }
     const markdown = `# ${title}\n\n${body}\n`
     const asset = this.ctx.knowledgeContent.save(new TextEncoder().encode(markdown))
     this.ctx.knowledgeCatalog.registerAsset(asset)
@@ -55,6 +223,7 @@ export class KnowledgeDocuments extends Service {
       sizeBytes: asset.sizeBytes,
       indexStatus: 'pending',
     })
+    if (input.tagNames !== undefined) this.ctx.knowledgeMetadata.setTags(updated.id, input.tagNames)
     const chunks = this.ctx.knowledgeChunker.chunk({ body: markdown, sourceType: 'markdown' })
     try {
       this.ctx.knowledgeIndex.index({ id: updated.id, libraryId: updated.libraryId, title: updated.title }, chunks)
@@ -62,6 +231,37 @@ export class KnowledgeDocuments extends Service {
     } catch (error) {
       updated = this.ctx.knowledgeCatalog.setDocumentIndexStatus(updated.id, 'failed')
       throw error
+    }
+    this.ctx.emit('knowledge/graph/invalidate')
+    this.ctx.emit('knowledge/document/changed', [updated.id])
+    return updated
+  }
+
+  updateUrlExtractedContent(documentId: string, input: UpdateKnowledgeUrlExtractedContentInput): KnowledgeDocument {
+    const text = validateBody(input.text)
+    const document = this.ctx.knowledgeCatalog.getDocuments([documentId])[0]
+    if (document === undefined) throw new RangeError('知识条目不存在')
+    if (document.sourceType !== 'url') throw new RangeError('只有网页知识条目支持同步页面正文')
+    const url = parseShortcutUrl(document.originalName, this.ctx.knowledgeContent.read(document.sourceAssetId))
+    const title = input.title === undefined || input.title.trim().length === 0 ? document.title : validateTitle(input.title)
+    const body = composeUrlIndexBody(title, url, text)
+    const current = this.ctx.knowledgeIndex.listDocumentChunks(document.id).map(chunk => chunk.body).join('\n').trim()
+    const titleChanged = title !== document.title
+    const shouldReindex = body.length > current.length + 40 || current === url || current.length < 80
+    let updated = titleChanged ? this.ctx.knowledgeCatalog.updateDocument(documentId, { title }) : document
+    if (!shouldReindex && !titleChanged) return updated
+    if (shouldReindex) {
+      updated = this.ctx.knowledgeCatalog.setDocumentIndexStatus(updated.id, 'pending')
+      const chunks = this.ctx.knowledgeChunker.chunk({ body, sourceType: 'url' })
+      try {
+        this.ctx.knowledgeIndex.index({ id: updated.id, libraryId: updated.libraryId, title: updated.title }, chunks)
+        updated = this.ctx.knowledgeCatalog.setDocumentIndexStatus(updated.id, 'ready')
+      } catch (error) {
+        updated = this.ctx.knowledgeCatalog.setDocumentIndexStatus(updated.id, 'failed')
+        throw error
+      }
+    } else {
+      this.ctx.knowledgeIndex.updateTitle(updated.id, updated.title)
     }
     this.ctx.emit('knowledge/graph/invalidate')
     this.ctx.emit('knowledge/document/changed', [updated.id])
@@ -95,6 +295,20 @@ export class KnowledgeDocuments extends Service {
     this.ctx.emit('knowledge/document/deleted', deletedIds)
     return { deletedIds }
   }
+}
+
+function parseMarkdownNote(content: string): { title: string, body: string } {
+  const normalized = content.replaceAll('\r\n', '\n')
+  const lines = normalized.split('\n')
+  if (lines[0]?.startsWith('# ')) {
+    const title = lines[0].slice(2).trim()
+    const bodyStart = lines[1]?.trim().length === 0 ? 2 : 1
+    return {
+      title,
+      body: lines.slice(bodyStart).join('\n').replace(/\s+$/u, ''),
+    }
+  }
+  return { title: '', body: normalized.replace(/\s+$/u, '') }
 }
 
 function validateTitle(title: string): string {

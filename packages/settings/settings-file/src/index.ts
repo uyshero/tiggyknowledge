@@ -14,6 +14,7 @@ import type {
   UpdateDshIntegrationSettingsInput,
   UpdateLlmIntegrationSettingsInput,
 } from '@tiggyknowledge/contracts'
+import { contributeSurface } from '@tiggyknowledge/plugin-surface'
 import {
   DEFAULT_LLM_BASE_URL,
   DEFAULT_LLM_MAX_INPUT_TOKENS,
@@ -79,6 +80,23 @@ export class FileSettings extends Service {
   constructor(ctx: Context, config: Config) {
     super(ctx, 'settings')
     this.filename = resolve(config.path)
+    contributeSurface(ctx, {
+      snapshot: { id: 'settings', contribute: () => ({ settings: this.snapshot() }) },
+      clients: [
+        {
+          id: 'client-settings-general',
+          moduleName: '@tiggyknowledge/client-settings-general',
+          label: 'General Settings',
+          description: 'General settings panel',
+        },
+        {
+          id: 'client-settings-config',
+          moduleName: '@tiggyknowledge/client-settings-config',
+          label: 'Plugin Configuration',
+          description: 'Plugin configuration panel',
+        },
+      ],
+    })
   }
 
   [Service.init](): void {

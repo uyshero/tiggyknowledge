@@ -43,6 +43,43 @@ function isSameOrigin(url: string, origin: string): boolean {
   }
 }
 
+function canOpenGuestWindow(url: string): boolean {
+  return url.length === 0 || url === 'about:blank' || url.startsWith('https:') || url.startsWith('http:')
+}
+
+function guestPopupOptions(): Electron.BrowserWindowConstructorOptions {
+  return {
+    width: 520,
+    height: 760,
+    minWidth: 360,
+    minHeight: 480,
+    autoHideMenuBar: true,
+    title: '安全验证',
+    webPreferences: {
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  }
+}
+
+function allowGuestPopup(): Electron.WindowOpenHandlerResponse {
+  return { action: 'allow', overrideBrowserWindowOptions: guestPopupOptions() }
+}
+
+function installGuestWindowHandling(): void {
+  app.on('web-contents-created', (_event, contents) => {
+    if (contents.getType() !== 'webview') return
+    contents.setWindowOpenHandler(({ url }) => canOpenGuestWindow(url) ? allowGuestPopup() : { action: 'deny' })
+    contents.on('did-create-window', popup => {
+      popup.setMenu(null)
+      if (!popup.isVisible()) popup.show()
+      popup.focus()
+      popup.webContents.setWindowOpenHandler(({ url }) => canOpenGuestWindow(url) ? allowGuestPopup() : { action: 'deny' })
+    })
+  })
+}
+
 async function loadCli(): Promise<CliModule> {
   if (!app.isPackaged) return await import('@tiggyknowledge/cli')
   return await import(pathToFileURL(resolve(projectRoot(), 'lib/index.js')).href)
@@ -70,6 +107,7 @@ async function createWindow(): Promise<void> {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      webviewTag: true,
     },
   })
 
@@ -249,6 +287,7 @@ async function start(): Promise<void> {
   if (!hasSingleInstanceLock) return
   await app.whenReady()
   app.setName('小虎AI知识库')
+  installGuestWindowHandling()
   installApplicationMenu()
 
   app.on('second-instance', () => {

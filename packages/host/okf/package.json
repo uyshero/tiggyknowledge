@@ -5,12 +5,18 @@
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/types/index.d.ts",
-  "exports": { ".": { "types": "./lib/types/index.d.ts", "default": "./lib/index.js" } },
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    }
+  },
   "peerDependencies": {
     "@deepseek-ai/cordis": "workspace:^",
     "@tiggyknowledge/catalog-sqlite": "workspace:^",
     "@tiggyknowledge/document-metadata": "workspace:^",
-    "@tiggyknowledge/preview-text": "workspace:^"
+    "@tiggyknowledge/preview-text": "workspace:^",
+    "@tiggyknowledge/plugin-surface": "workspace:^"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "workspace:^",
@@ -23,6 +29,7 @@
     "@tiggyknowledge/ingestion": "workspace:^",
     "@tiggyknowledge/metadata-sqlite": "workspace:^",
     "@tiggyknowledge/preview-text": "workspace:^",
-    "@tiggyknowledge/producer-text": "workspace:^"
+    "@tiggyknowledge/producer-text": "workspace:^",
+    "@tiggyknowledge/plugin-surface": "workspace:^"
   }
 }

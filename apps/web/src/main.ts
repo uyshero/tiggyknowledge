@@ -1,6 +1,9 @@
 import { Context, FiberState } from '@deepseek-ai/cordis'
 import Loader, { type EntryOptions } from '@deepseek-ai/cordis-plugin-loader'
 import type { ClientPluginDescriptor, SystemSnapshot } from '@tiggyknowledge/contracts'
+import { installPluginExternals } from './plugin-externals.ts'
+
+installPluginExternals()
 
 interface ClientPackageManifest {
   name?: unknown
@@ -35,14 +38,21 @@ async function readBootManifest(): Promise<ClientPluginDescriptor[]> {
   return snapshot.clientBoot.plugins
 }
 
+function loadClientModule(plugin: ClientPluginDescriptor): Promise<unknown> {
+  const bundled = BUNDLED_MODULES.get(plugin.moduleName)
+  if (bundled !== undefined) return bundled()
+  if (plugin.url !== undefined && plugin.url.startsWith('/ext/plugins/') && plugin.url.endsWith('/client.js')) {
+    return import(/* @vite-ignore */ plugin.url)
+  }
+  throw new Error(`web boot: client module is not bundled: ${plugin.moduleName}`)
+}
+
 async function boot(): Promise<void> {
   const plugins = await readBootManifest()
   const ctx = new Context()
   await ctx.plugin(Loader)
   const entries: EntryOptions[] = await Promise.all(plugins.map(async plugin => {
-    const load = BUNDLED_MODULES.get(plugin.moduleName)
-    if (load === undefined) throw new Error(`web boot: client module is not bundled: ${plugin.moduleName}`)
-    const implementation = await load()
+    const implementation = await loadClientModule(plugin)
     ctx.loader.builtins[plugin.moduleName] = implementation
     return { id: plugin.id, name: `cordis:${plugin.moduleName}` }
   }))
@@ -50,6 +60,7 @@ async function boot(): Promise<void> {
   await ctx.loader.await()
   const failures = [...ctx.loader.entries()].filter(entry => entry.fiber?.state !== FiberState.ACTIVE)
   if (failures.length > 0) throw new Error(`web boot: inactive plugins: ${failures.map(entry => entry.id).join(', ')}`)
+  ctx.clientApp.setClientModuleLoader(loadClientModule)
 }
 
 void boot().catch((error: unknown) => {

@@ -9,6 +9,7 @@ export interface DocumentPreviewContent {
     content: string;
     truncated: boolean;
     pageCount?: number;
+    sourceUrl?: string;
 }
 export type DocumentPreviewHandler = (document: KnowledgeDocument, bytes: Uint8Array) => DocumentPreviewContent | Promise<DocumentPreviewContent>;
 export declare class TextPreview extends Service {

@@ -4,14 +4,30 @@
     "rootDir": "src",
     "outDir": "lib/types"
   },
-  "include": ["src"],
+  "include": [
+    "src"
+  ],
   "references": [
-    { "path": "../../../vendor/cordis" },
-    { "path": "../../core/contracts" },
-    { "path": "../http-router" },
-    { "path": "../llm-client" },
-    { "path": "../llm-wiki" },
-    { "path": "../../settings/settings-file" },
-    { "path": "../../settings/llm-credentials" }
+    {
+      "path": "../../../vendor/cordis"
+    },
+    {
+      "path": "../../core/contracts"
+    },
+    {
+      "path": "../http-router"
+    },
+    {
+      "path": "../llm-client"
+    },
+    {
+      "path": "../../settings/settings-file"
+    },
+    {
+      "path": "../../settings/llm-credentials"
+    },
+    {
+      "path": "../plugin-surface"
+    }
   ]
 }

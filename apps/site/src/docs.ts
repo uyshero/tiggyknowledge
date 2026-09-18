@@ -2,6 +2,7 @@ import agentApi from '../content/docs/agent-api.md?raw'
 import desktop from '../content/docs/desktop.md?raw'
 import features from '../content/docs/features.md?raw'
 import gettingStarted from '../content/docs/getting-started.md?raw'
+import plugins from '../../../docs/third-party-plugins.md?raw'
 import roadmap from '../content/docs/roadmap.md?raw'
 
 export interface DocPage {
@@ -21,7 +22,7 @@ export const DOC_PAGES: DocPage[] = [
   {
     slug: 'features',
     title: '产品功能',
-    description: '知识库、搜索、图谱、Wiki、自定义插件与本地模型。',
+    description: '知识库、搜索、Wiki、自定义插件与本地模型。',
     markdown: features,
   },
   {
@@ -35,6 +36,12 @@ export const DOC_PAGES: DocPage[] = [
     title: '智能体接入',
     description: '面向外部智能体的只读知识库接口。',
     markdown: agentApi,
+  },
+  {
+    slug: 'plugins',
+    title: '第三方插件',
+    description: 'Host / Client 契约、命名、HTTP 与本地挂载流程。',
+    markdown: plugins,
   },
   {
     slug: 'roadmap',

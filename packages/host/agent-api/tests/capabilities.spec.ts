@@ -9,6 +9,8 @@ describe('TiggyKnowledge capability discovery', () => {
         entryId: 'plugin-1',
         moduleName: '@tiggyknowledge/query',
         face: 'host',
+        origin: 'builtin',
+        disableable: false,
         enabled: true,
         phase: 'active',
       }],
@@ -37,6 +39,8 @@ describe('TiggyKnowledge capability discovery', () => {
         entryId: 'plugin-1',
         moduleName: '@tiggyknowledge/query',
         face: 'host',
+        origin: 'builtin',
+        disableable: false,
         enabled: true,
         phase: 'active',
       }],
@@ -49,6 +53,17 @@ describe('TiggyKnowledge capability discovery', () => {
     expect(snapshot.capabilities.write).toBe(false)
     expect(snapshot.capabilities.operations.every(operation => operation.readOnly)).toBe(true)
     expect(snapshot.capabilities.operations.map(operation => operation.id)).not.toContain('write')
+  })
+
+  it('omits the OKF operation when the plugin is not loaded', () => {
+    const snapshot = createCapabilitiesSnapshot(['keyword'], [], '0.2.3', false)
+
+    expect(snapshot.capabilities.operations.map(operation => operation.id)).toEqual([
+      'status',
+      'libraries',
+      'search',
+      'read',
+    ])
   })
 
   it('creates a stable encoded local citation without endpoint details', () => {

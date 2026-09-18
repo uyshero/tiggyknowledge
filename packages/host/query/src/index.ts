@@ -4,6 +4,7 @@ import type { KnowledgeQuery, KnowledgeSearchResponse } from '@tiggyknowledge/co
 import type {} from '@tiggyknowledge/document-metadata'
 import type {} from '@tiggyknowledge/index-fts'
 import type {} from '@tiggyknowledge/semantic-capabilities'
+import { contributeSurface, httpFromRange } from '@tiggyknowledge/plugin-surface'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -16,6 +17,27 @@ export class KnowledgeQueryService extends Service {
 
   constructor(ctx: Context) {
     super(ctx, 'knowledgeQuery')
+    contributeSurface(ctx, {
+      clients: [{
+        id: 'client-ui-search',
+        moduleName: '@tiggyknowledge/client-ui-search',
+        label: 'Search',
+        description: 'Keyword search workbench',
+      }],
+      routes: [{
+        id: 'query:search',
+        methods: ['POST'],
+        path: '/api/search',
+        handler: async ({ assertSameOrigin, json, readJson }) => {
+          assertSameOrigin()
+          try {
+            json(this.search(await readJson<KnowledgeQuery>()))
+          } catch (error) {
+            throw httpFromRange(error, 'invalid_query')
+          }
+        },
+      }],
+    })
   }
 
   search(input: KnowledgeQuery): KnowledgeSearchResponse {

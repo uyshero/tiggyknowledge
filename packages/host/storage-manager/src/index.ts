@@ -4,6 +4,7 @@ import { promisify } from 'node:util'
 import { Context, Service } from '@deepseek-ai/cordis'
 import type {} from '@tiggyknowledge/catalog-sqlite'
 import type { OpenDataDirectoryResult } from '@tiggyknowledge/contracts'
+import { contributeSurface, HttpError } from '@tiggyknowledge/plugin-surface'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -18,6 +19,28 @@ export class StorageManager extends Service {
 
   constructor(ctx: Context) {
     super(ctx, 'storageManager')
+    contributeSurface(ctx, {
+      clients: [{
+        id: 'client-settings-storage',
+        moduleName: '@tiggyknowledge/client-settings-storage',
+        label: 'Storage Settings',
+        description: 'Local storage settings panel',
+      }],
+      routes: [{
+        id: 'storage:open-data-directory',
+        methods: ['POST'],
+        path: '/api/system/open-data-directory',
+        handler: async ({ assertSameOrigin, json }) => {
+          assertSameOrigin()
+          try {
+            json(await this.openDataDirectory())
+          } catch (error) {
+            if (error instanceof RangeError) throw new HttpError(404, 'data_directory_not_found', error.message)
+            throw new HttpError(500, 'open_data_directory_failed', error instanceof Error ? error.message : '无法打开本地数据目录')
+          }
+        },
+      }],
+    })
   }
 
   async openDataDirectory(): Promise<OpenDataDirectoryResult> {

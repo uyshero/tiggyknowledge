@@ -1,10 +1,36 @@
 .wiki-page { display: flex; min-height: 100%; flex-direction: column; }
-.wiki-summary { display: grid; grid-template-columns: repeat(4, minmax(110px, 1fr)); border-bottom: 1px solid #e8ebe9; background: #fafbfa; }
+.wiki-summary { display: grid; grid-template-columns: repeat(5, minmax(100px, 1fr)); border-bottom: 1px solid #e8ebe9; background: #fafbfa; }
 .wiki-summary > div { display: flex; min-height: 64px; justify-content: center; flex-direction: column; gap: 5px; padding: 0 22px; border-right: 1px solid #e8ebe9; }
 .wiki-summary > div:last-child { border-right: 0; }
 .wiki-summary span { color: #7b827d; font-size: 11px; }
 .wiki-summary strong { color: #2d322f; font-size: 17px; }
 .wiki-error { margin: 14px 22px 0; padding: 10px 12px; border-left: 3px solid #bf4c4c; background: #fff3f3; color: #8e3030; font-size: 12px; }
+.wiki-banner { display: flex; align-items: center; gap: 12px; margin: 12px 22px 0; padding: 10px 12px; border-left: 3px solid #7d8680; background: #f6f7f6; color: #4f5752; font-size: 12px; }
+.wiki-banner > span { flex: 1; line-height: 1.55; }
+.wiki-banner.generating { border-left-color: #4f6b5c; background: #f3f7f4; }
+.wiki-banner.failed { border-left-color: #bf4c4c; background: #fff3f3; color: #8e3030; }
+.wiki-banner.warning { border-left-color: #aa782e; background: #fffaf0; color: #76531f; }
+.wiki-banner .wiki-progress.compact { width: 120px; margin: 0; }
+.wiki-inbox { margin: 14px 22px 0; overflow: hidden; border: 1px solid #dfe5e1; border-radius: 10px; background: #fff; }
+.wiki-inbox.skipped { background: #fafbfa; }
+.wiki-inbox > header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 18px; border-bottom: 1px solid #e7ebe8; }
+.wiki-inbox > header h2 { margin: 2px 0 0; font-size: 16px; }
+.wiki-inbox > header > span { color: #6a746e; font-size: 12px; }
+.wiki-inbox-list { display: grid; }
+.wiki-inbox-list article { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px 18px; border-bottom: 1px solid #eef1ef; }
+.wiki-inbox-list article:last-child { border-bottom: 0; }
+.wiki-inbox-list strong { display: block; color: #2f3331; font-size: 13px; }
+.wiki-inbox-list span { color: #7b827d; font-size: 11px; }
+.wiki-inbox-actions { display: flex; gap: 8px; }
+.wiki-tree-search { display: flex; align-items: center; gap: 6px; margin: 0 4px 8px; padding: 0 8px; border: 1px solid #dce3df; border-radius: 6px; background: #fff; color: #858c87; }
+.wiki-tree-search input { width: 100%; height: 32px; border: 0; outline: 0; background: transparent; color: #2f3331; font-size: 12px; }
+.wiki-catalog { display: grid; gap: 22px; padding-top: 18px; }
+.wiki-catalog h2 { margin: 0 0 8px; color: #2a2f2c; font-size: 15px; }
+.wiki-catalog ul { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.wiki-catalog button { display: block; width: 100%; padding: 8px 10px; border: 0; border-radius: 6px; background: #f6f8f7; color: #2f3331; font-size: 13px; text-align: left; cursor: pointer; }
+.wiki-catalog button:hover { background: #edf1ee; }
+.wiki-lock-note { margin: 0; color: #76531f; font-size: 12px; line-height: 1.55; }
+.wiki-content .wiki-banner { margin: 18px 0 0; }
 .wiki-state { display: grid; min-height: 280px; place-items: center; color: #7b827d; font-size: 12px; }
 .wiki-empty, .wiki-generation { display: flex; min-height: 430px; align-items: center; justify-content: center; flex-direction: column; padding: 42px 24px; text-align: center; }
 .wiki-empty-icon { display: grid; width: 48px; height: 48px; place-items: center; border: 1px solid #dce3df; border-radius: 8px; background: #f4f5f4; color: #5e6661; }
@@ -46,6 +72,8 @@
 .wiki-tree button.active { background: #e2e4e3; color: #2f3331; font-weight: 600; }
 .wiki-tree button svg { flex: 0 0 auto; }
 .wiki-tree button span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wiki-tree button em { flex: 0 0 auto; margin-left: auto; color: #8a6a2a; font-size: 9px; font-style: normal; font-weight: 650; }
+.wiki-editor-section-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: end; }
 .wiki-tree button i { width: 6px; height: 6px; flex: 0 0 auto; margin-left: auto; border-radius: 50%; background: #b47a27; }
 .wiki-folder { display: flex; height: 32px; align-items: center; gap: 6px; color: #737b76; font-size: 10px; font-weight: 650; }
 .wiki-folder svg { flex: 0 0 auto; color: #929994; }

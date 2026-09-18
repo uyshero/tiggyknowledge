@@ -1,5 +1,5 @@
 import type { Context } from '@deepseek-ai/cordis'
-import { ArrowLeft, BadgeInfo, FilePenLine, FileText, Search, Star, Tag, Trash2, Upload, X } from 'lucide-react'
+import { ArrowLeft, BadgeInfo, FilePenLine, FileText, Link2, Search, Star, Tag, Trash2, Upload, X } from 'lucide-react'
 import { Fragment, useEffect, useMemo, useRef, useState, useSyncExternalStore, type JSX, type ReactNode } from 'react'
 import type {} from '@tiggyknowledge/client-connection'
 import type {} from '@tiggyknowledge/client-runtime'
@@ -64,6 +64,7 @@ function formatBytes(size: number): string {
 function formatSourceType(sourceType: KnowledgeDocument['sourceType']): string {
   if (sourceType === 'markdown') return 'Markdown'
   if (sourceType === 'pdf') return 'PDF'
+  if (sourceType === 'url') return '网页'
   return 'TXT'
 }
 
@@ -142,24 +143,6 @@ function isEditableMarkdownNote(document: KnowledgeDocument): boolean {
   return document.sourceType === 'markdown' && /-[a-f0-9]{8}\.md$/i.test(document.originalName)
 }
 
-function parseMarkdownNote(content: string): { title: string, body: string } {
-  const normalized = content.replaceAll('\r\n', '\n')
-  const lines = normalized.split('\n')
-  if (lines[0]?.startsWith('# ')) {
-    const title = lines[0].slice(2).trim()
-    if (lines[1]?.trim().length === 0) {
-      return {
-        title,
-        body: lines.slice(2).join('\n').replace(/\s+$/u, ''),
-      }
-    }
-  }
-  return {
-    title: '',
-    body: normalized.replace(/\s+$/u, ''),
-  }
-}
-
 function formatDocumentTime(value: string): string {
   return new Date(value).toLocaleString('zh-CN')
 }
@@ -204,6 +187,7 @@ function DocumentDetailsInspector({ documentId, document, metadata, preview }: {
             <div><dt>原始文件</dt><dd>{currentDocument.originalName}</dd></div>
             <div><dt>知识库</dt><dd>{currentDocument.libraryId}</dd></div>
             <div><dt>来源类型</dt><dd>{formatSourceType(currentDocument.sourceType)}</dd></div>
+            {localPreview?.sourceUrl !== undefined && <div><dt>网址</dt><dd><a href={localPreview.sourceUrl} rel="noreferrer" target="_blank">{localPreview.sourceUrl}</a></dd></div>}
           </dl>
         </section>
         <section>
@@ -349,6 +333,26 @@ export function apply(ctx: Context): void {
     }, [libraryId])
 
     useEffect(() => {
+      const dispose = ctx.on('client/document/updated', document => {
+        setDocuments(items => items.map(item => item.id === document.id ? document : item))
+        setPreview(value => value === undefined || value.document.id !== document.id ? value : { ...value, document })
+      })
+      return () => {
+        dispose()
+      }
+    }, [])
+
+    useEffect(() => {
+      if (libraryId.length === 0 || selectedDocumentId === undefined) return
+      if (documents.some(document => document.id === selectedDocumentId)) return
+      const controller = new AbortController()
+      void ctx.connection.documents(libraryId, controller.signal).then(result => {
+        setDocuments(result.items)
+      }).catch(() => {})
+      return () => controller.abort()
+    }, [documents, libraryId, selectedDocumentId])
+
+    useEffect(() => {
       if (selectedDocumentId === undefined) {
         setPreview(undefined)
         setMetadata(undefined)
@@ -401,11 +405,13 @@ export function apply(ctx: Context): void {
 
     const openEditDialog = (): void => {
       if (preview === undefined || selectedDocumentId === undefined) return
-      const markdownEditable = isEditableMarkdownNote(preview.document)
-      const parsed = markdownEditable ? parseMarkdownNote(preview.content) : undefined
-      setEditMarkdown(markdownEditable)
+      if (isEditableMarkdownNote(preview.document)) {
+        ctx.clientApp.selectPage('note-edit', { libraryId, documentId: selectedDocumentId })
+        return
+      }
+      setEditMarkdown(false)
       setEditTitle(preview.document.title)
-      setEditBody(parsed?.body ?? '')
+      setEditBody('')
       setEditError(undefined)
       setEditDialogOpen(true)
     }
@@ -556,8 +562,6 @@ export function apply(ctx: Context): void {
     const PreviewRenderer = previewRenderer?.component
     const activeInspector = app.documentInspectors.find(inspector => inspector.id === activeInspectorId)
     const ActiveInspector = activeInspector?.component
-    const graphEnabled = app.pages.some(page => page.id === 'graph')
-
     return (
       <div className="page documents-page">
         <header className="page-header compact-header documents-header">
@@ -567,7 +571,7 @@ export function apply(ctx: Context): void {
           </div>
           <div className="header-actions">
             {selectedIds.size > 0 && <button className="danger-button" type="button" onClick={() => requestDelete([...selectedIds])}><Trash2 size={16} />删除 {selectedIds.size} 项</button>}
-            {graphEnabled && <button className="secondary-button" type="button" disabled={selectedDocumentId === undefined} onClick={() => ctx.clientApp.selectPage('graph', { libraryId, documentId: selectedDocumentId })}>图谱</button>}
+            <button className="secondary-button" type="button" onClick={() => ctx.emit('client/url-create/open', libraryId)}><Link2 size={16} />添加网页</button>
             <button className="secondary-button" type="button" onClick={() => ctx.clientApp.selectPage('ingestion')}><Upload size={16} />继续导入</button>
           </div>
         </header>
@@ -576,7 +580,7 @@ export function apply(ctx: Context): void {
           <label className="documents-library-select"><span>知识库</span><select value={libraryId} onChange={event => selectLibrary(event.target.value)}>{libraries.map(library => <option key={library.id} value={library.id}>{library.name}</option>)}</select></label>
           <div className="documents-view-controls">
             <label className="documents-query"><Search size={14} /><input aria-label="筛选条目名称" value={documentQuery} onChange={event => setDocumentQuery(event.target.value)} placeholder="筛选名称" /></label>
-            <label><span className="visually-hidden">文件类型</span><select aria-label="文件类型" value={typeFilter} onChange={event => setTypeFilter(event.target.value as DocumentTypeFilter)}><option value="all">全部类型</option><option value="pdf">PDF</option><option value="markdown">Markdown</option><option value="text">TXT</option></select></label>
+            <label><span className="visually-hidden">文件类型</span><select aria-label="文件类型" value={typeFilter} onChange={event => setTypeFilter(event.target.value as DocumentTypeFilter)}><option value="all">全部类型</option><option value="pdf">PDF</option><option value="markdown">Markdown</option><option value="text">TXT</option><option value="url">网页</option></select></label>
             <label><span className="visually-hidden">条目排序</span><select aria-label="条目排序" value={sortBy} onChange={event => setSortBy(event.target.value as DocumentSort)}><option value="updated-desc">最近更新</option><option value="updated-asc">最早更新</option><option value="name-asc">名称升序</option><option value="name-desc">名称降序</option><option value="type-asc">按类型</option></select></label>
             <span>{visibleDocuments.length === documents.length ? `${documents.length} 个条目` : `${visibleDocuments.length} / ${documents.length} 个条目`}</span>
           </div>
@@ -593,7 +597,7 @@ export function apply(ctx: Context): void {
             ) : error !== undefined ? (
               <div className="document-pane-state error-state"><strong>无法读取知识条目</strong><span>{error}</span></div>
             ) : documents.length === 0 ? (
-              <div className="document-pane-state"><FileText size={22} /><strong>知识库中还没有条目</strong><button className="secondary-button" type="button" onClick={() => ctx.clientApp.selectPage('ingestion')}>导入文件</button></div>
+              <div className="document-pane-state"><FileText size={22} /><strong>知识库中还没有条目</strong><button className="secondary-button" type="button" onClick={() => ctx.emit('client/url-create/open', libraryId)}>添加网页</button><button className="secondary-button" type="button" onClick={() => ctx.clientApp.selectPage('ingestion')}>导入文件</button></div>
             ) : visibleDocuments.length === 0 ? (
               <div className="document-pane-state"><Search size={22} /><strong>没有符合条件的条目</strong><button className="secondary-button" type="button" onClick={() => { setDocumentQuery(''); setTypeFilter('all') }}>清除筛选</button></div>
             ) : (
@@ -602,7 +606,7 @@ export function apply(ctx: Context): void {
                   <div className={`document-row ${selectedDocumentId === document.id ? 'active' : ''}`} key={document.id}>
                     <input type="checkbox" aria-label={`选择 ${document.title}`} checked={selectedIds.has(document.id)} onChange={() => toggleDocument(document.id)} />
                     <button className="document-open" type="button" onClick={() => openDocument(document.id)}>
-                      <FileText size={16} />
+                      {document.sourceType === 'url' ? <Link2 size={16} /> : <FileText size={16} />}
                       <span><strong>{document.title}</strong><small>{document.originalName} · {formatBytes(document.sizeBytes)} · {DATE_FORMATTER.format(new Date(document.updatedAt))}</small></span>
                     </button>
                     <button className="document-delete" type="button" title="删除条目" onClick={() => requestDelete([document.id])}><Trash2 size={15} /></button>

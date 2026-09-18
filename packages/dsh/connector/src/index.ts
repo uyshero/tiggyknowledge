@@ -54,7 +54,7 @@ interface SearchResult {
   knowledgeBaseId: string
   title: string
   originalName: string
-  sourceType: 'text' | 'markdown' | 'pdf'
+  sourceType: 'text' | 'markdown' | 'pdf' | 'url'
   location: string
   snippet: string
   score: number
@@ -75,7 +75,7 @@ interface ReadResponse {
   knowledgeBaseId: string
   title: string
   originalName: string
-  sourceType: 'text' | 'markdown' | 'pdf'
+  sourceType: 'text' | 'markdown' | 'pdf' | 'url'
   content: string
   offset: number
   returnedCharacters: number
@@ -94,7 +94,7 @@ interface SourceReference {
   knowledgeBaseId: string
   documentId: string
   title: string
-  sourceType: 'text' | 'markdown' | 'pdf'
+  sourceType: 'text' | 'markdown' | 'pdf' | 'url'
 }
 
 interface CredentialProviderLike {

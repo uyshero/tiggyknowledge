@@ -3,9 +3,15 @@ import type {} from '@tiggyknowledge/catalog-sqlite'
 import type {
   KnowledgeDocumentMetadata,
   KnowledgeDocumentWithMetadata,
+  KnowledgeMetadataDocumentList,
   KnowledgeTag,
+  KnowledgeTagList,
+  RenameKnowledgeTagInput,
+  SetKnowledgeDocumentFavoriteInput,
+  SetKnowledgeDocumentTagsInput,
 } from '@tiggyknowledge/contracts'
 import type {} from '@tiggyknowledge/metadata-sqlite'
+import { contributeSurface, HttpError, httpFromRange, pathSegment } from '@tiggyknowledge/plugin-surface'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -34,6 +40,110 @@ export class DocumentMetadata extends Service {
 
   constructor(ctx: Context) {
     super(ctx, 'knowledgeMetadata')
+    contributeSurface(ctx, {
+      clients: [
+        {
+          id: 'client-ui-tags',
+          moduleName: '@tiggyknowledge/client-ui-tags',
+          label: 'Tags',
+          description: 'Tag browser and filtered documents',
+        },
+        {
+          id: 'client-ui-favorites',
+          moduleName: '@tiggyknowledge/client-ui-favorites',
+          label: 'Favorites',
+          description: 'Favorite documents workbench',
+        },
+      ],
+      routes: [
+        {
+          id: 'metadata:get',
+          methods: ['GET'],
+          path: /^\/api\/documents\/([^/]+)\/metadata$/,
+          handler: ({ json, match }) => {
+            try {
+              json(this.get(pathSegment(match)))
+            } catch (error) {
+              throw httpFromRange(error, 'document_not_found')
+            }
+          },
+        },
+        {
+          id: 'metadata:set-tags',
+          methods: ['PUT'],
+          path: /^\/api\/documents\/([^/]+)\/tags$/,
+          handler: async ({ assertSameOrigin, json, match, readJson }) => {
+            assertSameOrigin()
+            const input = await readJson<SetKnowledgeDocumentTagsInput>()
+            try {
+              json(this.setTags(pathSegment(match), Array.isArray(input.names) ? input.names : []))
+            } catch (error) {
+              throw httpFromRange(error, 'invalid_tags')
+            }
+          },
+        },
+        {
+          id: 'metadata:set-favorite',
+          methods: ['PUT'],
+          path: /^\/api\/documents\/([^/]+)\/favorite$/,
+          handler: async ({ assertSameOrigin, json, match, readJson }) => {
+            assertSameOrigin()
+            const input = await readJson<SetKnowledgeDocumentFavoriteInput>()
+            if (typeof input.favorite !== 'boolean') throw new HttpError(400, 'invalid_favorite', '收藏状态必须是布尔值')
+            try {
+              json(this.setFavorite(pathSegment(match), input.favorite))
+            } catch (error) {
+              throw httpFromRange(error, 'document_not_found')
+            }
+          },
+        },
+        {
+          id: 'metadata:tags',
+          methods: ['GET'],
+          path: '/api/tags',
+          handler: ({ json }) => {
+            const result: KnowledgeTagList = { items: this.listTags() }
+            json(result)
+          },
+        },
+        {
+          id: 'metadata:rename-tag',
+          methods: ['PUT'],
+          path: /^\/api\/tags\/([^/]+)$/,
+          handler: async ({ assertSameOrigin, json, match, readJson }) => {
+            assertSameOrigin()
+            const input = await readJson<RenameKnowledgeTagInput>()
+            try {
+              json(this.renameTag(pathSegment(match), input.name))
+            } catch (error) {
+              throw httpFromRange(error, 'invalid_tag')
+            }
+          },
+        },
+        {
+          id: 'metadata:tag-documents',
+          methods: ['GET'],
+          path: /^\/api\/tags\/([^/]+)\/documents$/,
+          handler: ({ json, match }) => {
+            try {
+              const result: KnowledgeMetadataDocumentList = { items: this.taggedDocuments(pathSegment(match)) }
+              json(result)
+            } catch (error) {
+              throw httpFromRange(error, 'tag_not_found')
+            }
+          },
+        },
+        {
+          id: 'metadata:favorites',
+          methods: ['GET'],
+          path: '/api/favorites',
+          handler: ({ json }) => {
+            const result: KnowledgeMetadataDocumentList = { items: this.favoriteDocuments() }
+            json(result)
+          },
+        },
+      ],
+    })
   }
 
   get(documentId: string): KnowledgeDocumentMetadata {

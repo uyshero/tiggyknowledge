@@ -5,7 +5,12 @@
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/types/index.d.ts",
-  "exports": { ".": { "types": "./lib/types/index.d.ts", "default": "./lib/index.js" } },
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    }
+  },
   "dependencies": {
     "fflate": "^0.8.2",
     "js-yaml": "^4.1.0"
@@ -14,7 +19,8 @@
     "@deepseek-ai/cordis": "workspace:^",
     "@tiggyknowledge/catalog-sqlite": "workspace:^",
     "@tiggyknowledge/content-local": "workspace:^",
-    "@tiggyknowledge/okf": "workspace:^"
+    "@tiggyknowledge/okf": "workspace:^",
+    "@tiggyknowledge/plugin-surface": "workspace:^"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "workspace:^",
@@ -29,6 +35,7 @@
     "@tiggyknowledge/okf": "workspace:^",
     "@tiggyknowledge/preview-text": "workspace:^",
     "@tiggyknowledge/producer-text": "workspace:^",
-    "@types/js-yaml": "^4.0.9"
+    "@types/js-yaml": "^4.0.9",
+    "@tiggyknowledge/plugin-surface": "workspace:^"
   }
 }

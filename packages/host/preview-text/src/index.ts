@@ -2,6 +2,7 @@ import { Context, Service } from '@deepseek-ai/cordis'
 import type {} from '@tiggyknowledge/catalog-sqlite'
 import type {} from '@tiggyknowledge/content-local'
 import type { KnowledgeDocument, KnowledgeDocumentPreview, KnowledgeDocumentSourceType } from '@tiggyknowledge/contracts'
+import { contributeSurface, httpFromRange, pathSegment } from '@tiggyknowledge/plugin-surface'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -15,6 +16,7 @@ export interface DocumentPreviewContent {
   content: string
   truncated: boolean
   pageCount?: number
+  sourceUrl?: string
 }
 
 export type DocumentPreviewHandler = (document: KnowledgeDocument, bytes: Uint8Array) => DocumentPreviewContent | Promise<DocumentPreviewContent>
@@ -34,6 +36,20 @@ export class TextPreview extends Service {
       }
     }
     this.register(['text', 'markdown'], handler)
+    contributeSurface(ctx, {
+      routes: [{
+        id: 'preview:document',
+        methods: ['GET'],
+        path: /^\/api\/documents\/([^/]+)\/preview$/,
+        handler: async ({ json, match }) => {
+          try {
+            json(await this.preview(pathSegment(match)))
+          } catch (error) {
+            throw httpFromRange(error, 'preview_unavailable')
+          }
+        },
+      }],
+    })
   }
 
   register(sourceTypes: KnowledgeDocumentSourceType[], handler: DocumentPreviewHandler): () => void {
@@ -60,6 +76,7 @@ export class TextPreview extends Service {
       format: document.sourceType,
       truncated: result.truncated,
       ...(result.pageCount === undefined ? {} : { pageCount: result.pageCount }),
+      ...(result.sourceUrl === undefined ? {} : { sourceUrl: result.sourceUrl }),
     }
   }
 }

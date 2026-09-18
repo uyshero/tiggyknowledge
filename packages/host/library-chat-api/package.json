@@ -13,13 +13,14 @@
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "workspace:^",
-    "@tiggyknowledge/http-router": "workspace:^",
-    "@tiggyknowledge/library-chat": "workspace:^"
+    "@tiggyknowledge/library-chat": "workspace:^",
+    "@tiggyknowledge/plugin-surface": "workspace:^"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "workspace:^",
     "@tiggyknowledge/contracts": "workspace:^",
     "@tiggyknowledge/http-router": "workspace:^",
-    "@tiggyknowledge/library-chat": "workspace:^"
+    "@tiggyknowledge/library-chat": "workspace:^",
+    "@tiggyknowledge/plugin-surface": "workspace:^"
   }
 }

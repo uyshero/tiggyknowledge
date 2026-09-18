@@ -6,7 +6,13 @@ import { Context, FiberState } from '@deepseek-ai/cordis'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import type {} from '@tiggyknowledge/webserver'
 import type { SecretCodec } from '@tiggyknowledge/llm-credentials'
-import { composeEntries, parseArguments } from './config.ts'
+import {
+  assertNoBuiltinCollision,
+  discoverExternalPlugins,
+  externalPluginInsertPatch,
+} from '@tiggyknowledge/external-plugins'
+import { bundleEntryIds, composeEntries, parseArguments } from './config.ts'
+import { setExternalPluginResolveContext } from './plugin-resolve.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -53,8 +59,16 @@ export async function boot(patchFiles: string[] = [], options: BootOptions = {})
   const port = options.port ?? Number(process.env.TIGGYKNOWLEDGE_PORT ?? 3210)
   const bundle = resolve(projectRoot, 'packages/bundle/local/cordis.patch.yml')
   const profile = resolve(dataRoot, 'profiles/local/cordis.patch.yml')
+  const builtinIds = bundleEntryIds(bundle)
+  const discovered = discoverExternalPlugins(dataRoot)
+  assertNoBuiltinCollision(discovered, builtinIds)
+  await setExternalPluginResolveContext(
+    resolve(projectRoot, 'apps/cli/package.json'),
+    discovered.map(plugin => plugin.directory),
+  )
   const entries = composeEntries([
     { filename: bundle },
+    { patches: externalPluginInsertPatch(discovered) },
     { filename: profile, required: false },
     ...patchFiles.map(filename => ({ filename })),
   ])
@@ -67,6 +81,8 @@ export async function boot(patchFiles: string[] = [], options: BootOptions = {})
   ctx.provide('webDistRoot', distRoot)
   ctx.provide('webPort', port)
   ctx.provide('appVersion', readProjectVersion(projectRoot))
+  ctx.provide('builtinPluginIds', builtinIds)
+  ctx.provide('externalPluginRegistry', discovered)
   if (options.secretCodec !== undefined) ctx.provide('secretCodec', options.secretCodec)
   try {
     await ctx.plugin(Loader, { baseUrl })

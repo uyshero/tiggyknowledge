@@ -141,7 +141,7 @@ interface RevisionRow {
   edited_at: string
 }
 
-const SCHEMA_VERSION = 8
+const SCHEMA_VERSION = 9
 
 export class WikiSqlite extends Service {
   private database: DatabaseSync | undefined
@@ -245,6 +245,12 @@ export class WikiSqlite extends Service {
         completed_at TEXT,
         error TEXT
       );
+      CREATE TABLE IF NOT EXISTS wiki_inbox_skips (
+        document_id TEXT NOT NULL,
+        content_hash TEXT NOT NULL,
+        skipped_at TEXT NOT NULL,
+        PRIMARY KEY(document_id, content_hash)
+      );
       CREATE TABLE IF NOT EXISTS wiki_page_revisions (
         page_id TEXT NOT NULL REFERENCES wiki_pages(id) ON DELETE CASCADE,
         version INTEGER NOT NULL,
@@ -289,6 +295,14 @@ export class WikiSqlite extends Service {
         completed_at = ?, error = '应用退出导致生成任务中断'
       WHERE state IN ('pending', 'running')
     `).run(new Date().toISOString())
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS wiki_inbox_skips (
+        document_id TEXT NOT NULL,
+        content_hash TEXT NOT NULL,
+        skipped_at TEXT NOT NULL,
+        PRIMARY KEY(document_id, content_hash)
+      );
+    `)
     yield () => {
       database.close()
       this.database = undefined
@@ -347,6 +361,99 @@ export class WikiSqlite extends Service {
       ON CONFLICT(document_id, content_hash) DO UPDATE SET
         summary = excluded.summary, summarized_at = excluded.summarized_at
     `).run(snapshot.documentId, snapshot.contentHash, summary, new Date().toISOString())
+  }
+
+  upsertDocumentSnapshot(snapshot: WikiDocumentSnapshot): void {
+    this.requireDatabase().prepare(`
+      INSERT INTO wiki_document_snapshots(document_id, library_id, title, content_hash, summary, summarized_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(document_id) DO UPDATE SET
+        library_id = excluded.library_id, title = excluded.title, content_hash = excluded.content_hash,
+        summary = CASE WHEN wiki_document_snapshots.content_hash = excluded.content_hash
+          THEN wiki_document_snapshots.summary ELSE excluded.summary END,
+        summarized_at = CASE WHEN wiki_document_snapshots.content_hash = excluded.content_hash
+          THEN wiki_document_snapshots.summarized_at ELSE excluded.summarized_at END
+    `).run(
+      snapshot.documentId, snapshot.libraryId, snapshot.title, snapshot.contentHash,
+      snapshot.summary ?? null, snapshot.summarizedAt ?? null,
+    )
+  }
+
+  listInboxSkips(): Array<{ documentId: string, contentHash: string, skippedAt: string }> {
+    const rows = this.requireDatabase().prepare(`
+      SELECT document_id, content_hash, skipped_at FROM wiki_inbox_skips
+      ORDER BY skipped_at DESC, document_id
+    `).all() as Array<{ document_id: string, content_hash: string, skipped_at: string }>
+    return rows.map(row => ({
+      documentId: row.document_id,
+      contentHash: row.content_hash,
+      skippedAt: row.skipped_at,
+    }))
+  }
+
+  skipInboxItem(documentId: string, contentHash: string): void {
+    this.requireDatabase().prepare(`
+      INSERT INTO wiki_inbox_skips(document_id, content_hash, skipped_at)
+      VALUES (?, ?, ?)
+      ON CONFLICT(document_id, content_hash) DO UPDATE SET skipped_at = excluded.skipped_at
+    `).run(documentId, contentHash, new Date().toISOString())
+  }
+
+  unskipInboxItem(documentId: string): void {
+    this.requireDatabase().prepare('DELETE FROM wiki_inbox_skips WHERE document_id = ?').run(documentId)
+  }
+
+  isInboxSkipped(documentId: string, contentHash: string): boolean {
+    const row = this.requireDatabase().prepare(`
+      SELECT 1 FROM wiki_inbox_skips WHERE document_id = ? AND content_hash = ?
+    `).get(documentId, contentHash) as { 1: number } | undefined
+    return row !== undefined
+  }
+
+  unlockPage(pageId: string, expectedVersion: number): WikiPage {
+    const database = this.requireDatabase()
+    database.exec('BEGIN IMMEDIATE')
+    try {
+      const current = this.getPage(pageId)
+      if (current === undefined) throw new RangeError('Wiki 页面不存在')
+      if (current.version !== expectedVersion) throw new RangeError('Wiki 页面已被其他操作更新，请刷新后重试')
+      const result = database.prepare(`
+        UPDATE wiki_pages SET state = 'ready', version = version + 1, updated_at = ?
+        WHERE id = ? AND version = ?
+      `).run(new Date().toISOString(), pageId, expectedVersion)
+      if (result.changes !== 1) throw new RangeError('Wiki 页面已被其他操作更新，请刷新后重试')
+      database.exec('COMMIT')
+    } catch (error) {
+      database.exec('ROLLBACK')
+      throw error
+    }
+    const updated = this.getPage(pageId)
+    if (updated === undefined) throw new Error('wiki-sqlite: page unlock failed')
+    return updated
+  }
+
+  publishPage(pageId: string, expectedVersion: number): WikiPage {
+    const current = this.getPage(pageId)
+    if (current === undefined) throw new RangeError('Wiki 页面不存在')
+    if (current.status === 'published') return current
+    if (current.version !== expectedVersion) throw new RangeError('Wiki 页面已被其他操作更新，请刷新后重试')
+    const database = this.requireDatabase()
+    database.exec('BEGIN IMMEDIATE')
+    try {
+      const result = database.prepare(`
+        UPDATE wiki_pages SET publication_status = 'published', version = version + 1,
+          last_edit_source = 'user', updated_at = ?
+        WHERE id = ? AND version = ?
+      `).run(new Date().toISOString(), pageId, expectedVersion)
+      if (result.changes !== 1) throw new RangeError('Wiki 页面已被其他操作更新，请刷新后重试')
+      database.exec('COMMIT')
+    } catch (error) {
+      database.exec('ROLLBACK')
+      throw error
+    }
+    const updated = this.getPage(pageId)
+    if (updated === undefined) throw new Error('wiki-sqlite: page publish failed')
+    return updated
   }
 
   syncDocumentSnapshots(snapshots: WikiDocumentSnapshot[]): void {

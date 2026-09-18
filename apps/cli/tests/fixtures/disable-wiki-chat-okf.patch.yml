@@ -1,0 +1,14 @@
+- id: knowledge-okf
+  disabled: true
+
+- id: okf-export
+  disabled: true
+
+- id: llm-wiki
+  disabled: true
+
+- id: wiki-governance
+  disabled: true
+
+- id: library-chat
+  disabled: true

@@ -35,7 +35,6 @@ export function apply(ctx: Context): void {
     const [editDescription, setEditDescription] = useState('')
     const [editError, setEditError] = useState<string>()
     const [editing, setEditing] = useState(false)
-    const graphEnabled = app.pages.some(page => page.id === 'graph')
 
     useEffect(() => {
       const controller = new AbortController()
@@ -156,7 +155,6 @@ export function apply(ctx: Context): void {
           </div>
           <div className="header-actions">
             <button className="icon-button" type="button" title="搜索" onClick={() => ctx.clientApp.selectPage('search')}><Search size={18} /></button>
-            {graphEnabled && <button className="secondary-button" type="button" onClick={() => ctx.clientApp.selectPage('graph')}>图谱</button>}
             <button className="secondary-button" type="button" onClick={() => ctx.clientApp.selectPage('ingestion')}><Upload size={16} />批量上传</button>
             <button className="primary-button" type="button" onClick={openCreate}><Plus size={16} />新建知识库</button>
           </div>
@@ -177,7 +175,7 @@ export function apply(ctx: Context): void {
           <section className="empty-workspace">
             <div className="empty-icon"><BookOpen size={24} /></div>
             <h2>还没有知识库</h2>
-            <p>创建知识库后即可导入 Markdown、TXT 和文本型 PDF。</p>
+            <p>创建知识库后即可导入 Markdown、TXT、文本型 PDF，或保存网址。</p>
             <div className="empty-actions">
               <button className="primary-button" type="button" onClick={openCreate}><Plus size={16} />新建知识库</button>
               <button className="secondary-button" type="button" onClick={() => ctx.clientApp.selectPage('ingestion')}><FileText size={16} />导入文件</button>

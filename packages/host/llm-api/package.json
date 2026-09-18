@@ -13,11 +13,10 @@
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "workspace:^",
-    "@tiggyknowledge/http-router": "workspace:^",
     "@tiggyknowledge/llm-client": "workspace:^",
     "@tiggyknowledge/llm-credentials": "workspace:^",
-    "@tiggyknowledge/llm-wiki": "workspace:^",
-    "@tiggyknowledge/settings-file": "workspace:^"
+    "@tiggyknowledge/settings-file": "workspace:^",
+    "@tiggyknowledge/plugin-surface": "workspace:^"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "workspace:^",
@@ -25,7 +24,7 @@
     "@tiggyknowledge/http-router": "workspace:^",
     "@tiggyknowledge/llm-client": "workspace:^",
     "@tiggyknowledge/llm-credentials": "workspace:^",
-    "@tiggyknowledge/llm-wiki": "workspace:^",
-    "@tiggyknowledge/settings-file": "workspace:^"
+    "@tiggyknowledge/settings-file": "workspace:^",
+    "@tiggyknowledge/plugin-surface": "workspace:^"
   }
 }

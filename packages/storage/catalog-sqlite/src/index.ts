@@ -9,10 +9,13 @@ import type {
   IngestionBatchResult,
   KnowledgeDocument,
   KnowledgeDocumentIndexStatus,
+  KnowledgeDocumentRevision,
   KnowledgeDocumentSourceType,
   KnowledgeLibrary,
+  KnowledgeLibraryList,
   UpdateKnowledgeLibraryInput,
 } from '@tiggyknowledge/contracts'
+import { contributeSurface, httpFromRange, pathSegment } from '@tiggyknowledge/plugin-surface'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -24,7 +27,7 @@ export interface Config {
   dataDir: string
 }
 
-const SCHEMA_VERSION = 3
+const SCHEMA_VERSION = 4
 
 interface LibraryRow {
   id: string
@@ -83,6 +86,48 @@ export class CatalogSqlite extends Service {
   constructor(ctx: Context, config: Config) {
     super(ctx, 'knowledgeCatalog')
     this.databasePath = resolve(config.dataDir, 'database.sqlite')
+    contributeSurface(ctx, {
+      snapshot: { id: 'catalog', contribute: () => ({ catalog: this.summary() }) },
+      clients: [{
+        id: 'client-ui-knowledge',
+        moduleName: '@tiggyknowledge/client-ui-knowledge',
+        label: 'Knowledge',
+        description: 'Knowledge library workbench',
+      }],
+      routes: [
+        {
+          id: 'catalog:libraries',
+          methods: ['GET', 'POST'],
+          path: '/api/libraries',
+          handler: async ({ method, assertSameOrigin, json, readJson }) => {
+            if (method === 'GET') {
+              const result: KnowledgeLibraryList = { items: this.listLibraries() }
+              json(result)
+              return
+            }
+            assertSameOrigin()
+            try {
+              json(this.createLibrary(await readJson<CreateKnowledgeLibraryInput>()), 201)
+            } catch (error) {
+              throw httpFromRange(error, 'invalid_library')
+            }
+          },
+        },
+        {
+          id: 'catalog:update-library',
+          methods: ['PUT'],
+          path: /^\/api\/libraries\/([^/]+)$/,
+          handler: async ({ assertSameOrigin, json, match, readJson }) => {
+            assertSameOrigin()
+            try {
+              json(this.updateLibrary(pathSegment(match), await readJson<UpdateKnowledgeLibraryInput>()))
+            } catch (error) {
+              throw httpFromRange(error, 'invalid_library')
+            }
+          },
+        },
+      ],
+    })
   }
 
   async *[Service.init](): AsyncGenerator<() => void> {
@@ -151,6 +196,19 @@ export class CatalogSqlite extends Service {
     if (!documentColumns.has('content_hash')) database.exec("ALTER TABLE documents ADD COLUMN content_hash TEXT NOT NULL DEFAULT ''")
     if (!documentColumns.has('size_bytes')) database.exec('ALTER TABLE documents ADD COLUMN size_bytes INTEGER NOT NULL DEFAULT 0')
     if (!documentColumns.has('index_status')) database.exec("ALTER TABLE documents ADD COLUMN index_status TEXT NOT NULL DEFAULT 'pending'")
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS document_revisions (
+        id TEXT PRIMARY KEY,
+        document_id TEXT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+        version INTEGER NOT NULL,
+        title TEXT NOT NULL,
+        body TEXT NOT NULL,
+        source_asset_id TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL,
+        UNIQUE(document_id, version)
+      );
+      CREATE INDEX IF NOT EXISTS document_revisions_document ON document_revisions(document_id, version DESC);
+    `)
     database.exec('CREATE INDEX IF NOT EXISTS documents_library_hash ON documents(library_id, content_hash)')
     database.prepare(`
       INSERT INTO metadata(key, value) VALUES ('schema_version', ?)
@@ -384,6 +442,58 @@ export class CatalogSqlite extends Service {
 
   setDocumentIndexStatus(id: string, status: KnowledgeDocumentIndexStatus): KnowledgeDocument {
     return this.updateDocument(id, { indexStatus: status })
+  }
+
+  addDocumentRevision(input: { documentId: string, title: string, body: string, sourceAssetId: string }): KnowledgeDocumentRevision {
+    const database = this.requireDatabase()
+    if (this.getDocuments([input.documentId])[0] === undefined) throw new RangeError('知识条目不存在')
+    const current = database.prepare('SELECT max(version) AS version FROM document_revisions WHERE document_id = ?').get(input.documentId) as { version: number | null }
+    const version = (current.version ?? 0) + 1
+    const createdAt = new Date().toISOString()
+    database.prepare(`
+      INSERT INTO document_revisions(id, document_id, version, title, body, source_asset_id, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(randomUUID(), input.documentId, version, input.title, input.body, input.sourceAssetId, createdAt)
+    return {
+      documentId: input.documentId,
+      version,
+      title: input.title,
+      body: input.body,
+      createdAt,
+    }
+  }
+
+  listDocumentRevisions(documentId: string): KnowledgeDocumentRevision[] {
+    if (this.getDocuments([documentId])[0] === undefined) throw new RangeError('知识条目不存在')
+    const rows = this.requireDatabase().prepare(`
+      SELECT document_id, version, title, body, created_at
+      FROM document_revisions
+      WHERE document_id = ?
+      ORDER BY version DESC
+    `).all(documentId) as { document_id: string, version: number, title: string, body: string, created_at: string }[]
+    return rows.map(row => ({
+      documentId: row.document_id,
+      version: row.version,
+      title: row.title,
+      body: row.body,
+      createdAt: row.created_at,
+    }))
+  }
+
+  getDocumentRevision(documentId: string, version: number): KnowledgeDocumentRevision {
+    const row = this.requireDatabase().prepare(`
+      SELECT document_id, version, title, body, created_at
+      FROM document_revisions
+      WHERE document_id = ? AND version = ?
+    `).get(documentId, version) as { document_id: string, version: number, title: string, body: string, created_at: string } | undefined
+    if (row === undefined) throw new RangeError('笔记版本不存在')
+    return {
+      documentId: row.document_id,
+      version: row.version,
+      title: row.title,
+      body: row.body,
+      createdAt: row.created_at,
+    }
   }
 
   createIngestionJob(libraryId: string, totalFiles: number): string {

@@ -1,5 +1,6 @@
 import { Context, Service } from '@deepseek-ai/cordis'
 import type { KnowledgeSearchMode, SemanticCapabilityProvider, SemanticCapabilitySnapshot } from '@tiggyknowledge/contracts'
+import { contributeSurface } from '@tiggyknowledge/plugin-surface'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -40,6 +41,9 @@ export class KnowledgeSemanticCapabilities extends Service {
 
   constructor(ctx: Context) {
     super(ctx, 'knowledgeSemanticCapabilities')
+    contributeSurface(ctx, {
+      snapshot: { id: 'semantic-capabilities', contribute: () => ({ semanticSearch: this.snapshot() }) },
+    })
   }
 
   registerProvider(input: RegisterSemanticProviderInput): () => void {

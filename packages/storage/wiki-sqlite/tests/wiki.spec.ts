@@ -269,4 +269,45 @@ describe('wiki-sqlite', () => {
       expect(storage.getPage('concept/b')).toMatchObject({ outLinks: [], inLinks: ['concept/a'] })
     })
   })
+
+  it('skips inbox items until the document hash changes and unlocks locked pages', async () => {
+    await withStorage(storage => {
+      storage.replaceWiki([{
+        id: 'page-locked',
+        slug: 'topic/locked',
+        title: '锁定词条',
+        order: 0,
+        state: 'locked',
+        sections: [{ id: 'section-locked', title: '正文', body: '已人工修订的正文。', order: 0, sources: [] }],
+      }], [{
+        documentId: 'document-1',
+        libraryId: 'library-1',
+        title: '来源',
+        contentHash: 'hash-1',
+      }])
+      storage.skipInboxItem('document-2', 'hash-2')
+      expect(storage.isInboxSkipped('document-2', 'hash-2')).toBe(true)
+      expect(storage.isInboxSkipped('document-2', 'hash-3')).toBe(false)
+      expect(storage.listInboxSkips()).toEqual([expect.objectContaining({
+        documentId: 'document-2',
+        contentHash: 'hash-2',
+        skippedAt: expect.any(String),
+      })])
+      storage.unskipInboxItem('document-2')
+      expect(storage.isInboxSkipped('document-2', 'hash-2')).toBe(false)
+      expect(storage.listInboxSkips()).toEqual([])
+      storage.skipInboxItem('document-2', 'hash-2')
+      const unlocked = storage.unlockPage('page-locked', 1)
+      expect(unlocked).toMatchObject({ id: 'page-locked', state: 'ready', version: 2 })
+      storage.replaceWiki([{
+        id: 'page-draft',
+        slug: 'topic/draft',
+        title: '待核词条',
+        status: 'draft',
+        order: 0,
+        sections: [{ id: 'section-draft', title: '正文', body: '待核对的正文。', order: 0, sources: [] }],
+      }], [])
+      expect(storage.publishPage('page-draft', 1)).toMatchObject({ status: 'published', version: 2 })
+    })
+  })
 })

@@ -15,13 +15,15 @@
     "@deepseek-ai/cordis": "workspace:^",
     "@tiggyknowledge/catalog-sqlite": "workspace:^",
     "@tiggyknowledge/document-metadata": "workspace:^",
-    "@tiggyknowledge/preview-text": "workspace:^"
+    "@tiggyknowledge/preview-text": "workspace:^",
+    "@tiggyknowledge/plugin-surface": "workspace:^"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "workspace:^",
     "@tiggyknowledge/catalog-sqlite": "workspace:^",
     "@tiggyknowledge/contracts": "workspace:^",
     "@tiggyknowledge/document-metadata": "workspace:^",
-    "@tiggyknowledge/preview-text": "workspace:^"
+    "@tiggyknowledge/preview-text": "workspace:^",
+    "@tiggyknowledge/plugin-surface": "workspace:^"
   }
 }

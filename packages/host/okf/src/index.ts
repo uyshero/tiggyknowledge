@@ -3,6 +3,7 @@ import type {} from '@tiggyknowledge/catalog-sqlite'
 import type { KnowledgeOkfMapping } from '@tiggyknowledge/contracts'
 import type {} from '@tiggyknowledge/document-metadata'
 import type {} from '@tiggyknowledge/preview-text'
+import { contributeSurface, httpFromRange, pathSegment } from '@tiggyknowledge/plugin-surface'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -15,6 +16,26 @@ export class KnowledgeOkf extends Service {
 
   constructor(ctx: Context) {
     super(ctx, 'knowledgeOkf')
+    contributeSurface(ctx, {
+      clients: [{
+        id: 'client-inspector-okf',
+        moduleName: '@tiggyknowledge/client-inspector-okf',
+        label: 'OKF Inspector',
+        description: 'Runtime OKF concept and source mapping',
+      }],
+      routes: [{
+        id: 'okf:mapping',
+        methods: ['GET'],
+        path: /^\/api\/documents\/([^/]+)\/okf$/,
+        handler: async ({ json, match }) => {
+          try {
+            json(await this.mapping(pathSegment(match)))
+          } catch (error) {
+            throw httpFromRange(error, 'document_not_found')
+          }
+        },
+      }],
+    })
   }
 
   async mapping(documentId: string): Promise<KnowledgeOkfMapping> {

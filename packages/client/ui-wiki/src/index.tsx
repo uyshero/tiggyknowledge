@@ -1,15 +1,12 @@
 import type { Context } from '@deepseek-ai/cordis'
-import { ChevronRight, FileEdit, FolderClosed, History, Library, RefreshCw, RotateCcw, Settings, Square, Undo2, X } from 'lucide-react'
-import { Fragment, useCallback, useEffect, useMemo, useState, type JSX, type ReactNode } from 'react'
+import { ChevronRight, FileEdit, FolderClosed, History, Library, Plus, RefreshCw, Search, Settings, Square, Undo2, Unlock, X } from 'lucide-react'
+import { Fragment, useCallback, useEffect, useMemo, useState, useSyncExternalStore, type JSX, type ReactNode } from 'react'
 import type {} from '@tiggyknowledge/client-connection'
 import type {} from '@tiggyknowledge/client-runtime'
 import type {
-  StartWikiGenerationInput,
   UpdateWikiPageInput,
-  WikiEstimate,
   WikiFolder,
   WikiGeneration,
-  WikiGenerationMode,
   WikiPage,
   WikiPageRevision,
   WikiPageSummary,
@@ -162,14 +159,14 @@ function sourceList(page: WikiPage | undefined): WikiSource[] {
 }
 
 function generationPhaseLabel(phase: string): string {
-  if (phase === 'scanning') return '正在扫描知识库'
-  if (phase.startsWith('summarizing:')) return '正在提取文档事实'
-  if (phase === 'planning') return '正在规划、评分并归并候选词条'
-  if (phase === 'planning:compact-retry') return '候选输出过长，正在紧凑重试'
-  if (phase === 'synthesizing') return '正在为通过筛选的词条生成正文'
+  if (phase === 'queued') return '已加入后台队列'
+  if (phase.startsWith('summarizing:')) return '正在提取文章要点'
+  if (phase === 'synthesizing') return '正在生成词条'
   if (phase === 'synthesizing:compact-retry') return '输出过长，正在紧凑重试'
-  if (phase === 'completed') return 'Wiki 生成完成'
-  return phase || '正在准备知识文档'
+  if (phase === 'completed') return '词条已生成'
+  if (phase === 'cancelled') return '已取消'
+  if (phase === 'failed') return '生成失败'
+  return phase || '正在准备词条'
 }
 
 function pageTypeLabel(type: WikiPageSummary['pageType']): string {
@@ -183,11 +180,16 @@ function pageTypeLabel(type: WikiPageSummary['pageType']): string {
     procedure: '流程',
     decision: '决策',
     topic: '专题',
-    index: '导航',
+    index: '首页',
     synthesis: '综合',
     comparison: '比较',
   }
   return labels[type]
+}
+
+function wikiPageId(value: unknown): string | undefined {
+  if (typeof value !== 'object' || value === null || !('pageId' in value)) return undefined
+  return typeof value.pageId === 'string' && value.pageId.length > 0 ? value.pageId : undefined
 }
 
 type WikiTreeNode =
@@ -212,8 +214,26 @@ function wikiTree(folders: WikiFolder[], pages: WikiPageSummary[]): WikiTreeNode
   return result
 }
 
+function catalogGroups(folders: WikiFolder[], pages: WikiPageSummary[]): Array<{ name: string, pages: WikiPageSummary[] }> {
+  const topics = pages.filter(page => page.pageType !== 'index' && page.status === 'published')
+  const folderById = new Map(folders.map(folder => [folder.id, folder]))
+  const groups = new Map<string, WikiPageSummary[]>()
+  for (const page of topics) {
+    const folder = page.folderId === undefined ? undefined : folderById.get(page.folderId)
+    const name = folder?.path.split('/')[0] || '未分组'
+    const items = groups.get(name) ?? []
+    items.push(page)
+    groups.set(name, items)
+  }
+  return [...groups.entries()].map(([name, items]) => ({
+    name,
+    pages: items.sort((left, right) => left.order - right.order || left.title.localeCompare(right.title, 'zh')),
+  }))
+}
+
 export function apply(ctx: Context): void {
   function WikiPageView(): JSX.Element {
+    const app = useSyncExternalStore(ctx.clientApp.subscribe, ctx.clientApp.getSnapshot)
     const [status, setStatus] = useState<WikiStatus>()
     const [pages, setPages] = useState<WikiPageSummary[]>([])
     const [folders, setFolders] = useState<WikiFolder[]>([])
@@ -223,13 +243,9 @@ export function apply(ctx: Context): void {
     const [loading, setLoading] = useState(true)
     const [pageLoading, setPageLoading] = useState(false)
     const [error, setError] = useState<string>()
-    const [confirmation, setConfirmation] = useState<{ estimate: WikiEstimate, mode: WikiGenerationMode }>()
-    const [estimating, setEstimating] = useState<WikiGenerationMode>()
-    const [starting, setStarting] = useState(false)
+    const [busyDocumentId, setBusyDocumentId] = useState<string>()
+    const [busyKind, setBusyKind] = useState<'accept' | 'skip'>()
     const [cancelling, setCancelling] = useState(false)
-    const [confirmingPlan, setConfirmingPlan] = useState(false)
-    const [selectedCandidateSlugs, setSelectedCandidateSlugs] = useState<string[]>([])
-    const [selectedArchiveSlugs, setSelectedArchiveSlugs] = useState<string[]>([])
     const [editing, setEditing] = useState(false)
     const [editTitle, setEditTitle] = useState('')
     const [editSummary, setEditSummary] = useState('')
@@ -239,10 +255,13 @@ export function apply(ctx: Context): void {
     const [editQuestions, setEditQuestions] = useState('')
     const [editSections, setEditSections] = useState<UpdateWikiPageInput['sections']>([])
     const [saving, setSaving] = useState(false)
+    const [unlocking, setUnlocking] = useState(false)
+    const [publishing, setPublishing] = useState(false)
     const [historyOpen, setHistoryOpen] = useState(false)
     const [revisions, setRevisions] = useState<WikiPageRevision[]>([])
     const [historyLoading, setHistoryLoading] = useState(false)
     const [revertingVersion, setRevertingVersion] = useState<number>()
+    const [treeQuery, setTreeQuery] = useState('')
 
     const loadWorkspace = useCallback(async (signal?: AbortSignal): Promise<void> => {
       const nextStatus = await ctx.connection.wikiStatus(signal)
@@ -253,20 +272,21 @@ export function apply(ctx: Context): void {
       } else {
         setGeneration(nextStatus.lastGeneration)
       }
-      if (nextStatus.pageCount > 0) {
-        const [nextPages, nextFolders] = await Promise.all([
-          ctx.connection.wikiPages(signal),
-          ctx.connection.wikiFolders(signal),
-        ])
-        setPages(nextPages)
-        setFolders(nextFolders)
-        setSelectedPageId(current => current !== undefined && nextPages.some(item => item.id === current) ? current : nextPages[0]?.id)
-      } else {
-        setPages([])
-        setFolders([])
-        setSelectedPageId(undefined)
-        setPage(undefined)
-      }
+      const [nextPages, nextFolders] = nextStatus.pageCount > 0
+        ? await Promise.all([ctx.connection.wikiPages(signal), ctx.connection.wikiFolders(signal)])
+        : [[], []]
+      setPages(nextPages)
+      setFolders(nextFolders)
+      const requested = wikiPageId(ctx.clientApp.getSnapshot().pageState)
+      const drafts = nextPages
+        .filter(item => item.pageType !== 'index' && item.status === 'draft')
+        .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+      setSelectedPageId(current => {
+        if (requested !== undefined && nextPages.some(item => item.id === requested)) return requested
+        if (current !== undefined && nextPages.some(item => item.id === current)) return current
+        return drafts[0]?.id ?? nextPages.find(item => item.pageType === 'index')?.id ?? nextPages[0]?.id
+      })
+      if (nextPages.length === 0) setPage(undefined)
     }, [])
 
     useEffect(() => {
@@ -298,6 +318,12 @@ export function apply(ctx: Context): void {
         document.removeEventListener('visibilitychange', handleVisibility)
       }
     }, [loadWorkspace])
+
+    useEffect(() => {
+      const requested = wikiPageId(app.pageState)
+      if (requested === undefined || !pages.some(item => item.id === requested)) return
+      setSelectedPageId(requested)
+    }, [app.pageState, pages])
 
     useEffect(() => {
       if (selectedPageId === undefined) return
@@ -338,70 +364,49 @@ export function apply(ctx: Context): void {
       }
     }, [generation, loadWorkspace])
 
-    useEffect(() => {
-      if (generation?.state !== 'planned' || generation.plan === undefined) return
-      setSelectedCandidateSlugs(generation.plan.candidates.map(candidate => candidate.slug))
-      setSelectedArchiveSlugs([])
-    }, [generation?.id, generation?.state])
-
-    const requestGeneration = async (mode: WikiGenerationMode): Promise<void> => {
-      if (estimating !== undefined) return
-      setEstimating(mode)
+    const acceptDocument = async (documentId: string, force = false): Promise<void> => {
+      if (busyDocumentId !== undefined) return
+      setBusyDocumentId(documentId)
+      setBusyKind('accept')
       setError(undefined)
       try {
-        const estimate = await ctx.connection.wikiEstimate(mode)
-        setConfirmation({ estimate, mode })
+        const next = await ctx.connection.startWikiGeneration({ documentId, mode: 'document', force })
+        setGeneration(next)
+        await loadWorkspace()
       } catch (reason) {
-        setError(errorMessage(reason, '无法估算 Wiki 生成任务'))
+        setError(errorMessage(reason, force ? '无法完善这个词条' : '无法确认这篇文章'))
       } finally {
-        setEstimating(undefined)
+        setBusyDocumentId(undefined)
+        setBusyKind(undefined)
       }
     }
 
-    const startGeneration = async (): Promise<void> => {
-      if (confirmation === undefined || starting) return
-      setStarting(true)
+    const skipDocument = async (documentId: string): Promise<void> => {
+      if (busyDocumentId !== undefined) return
+      setBusyDocumentId(documentId)
+      setBusyKind('skip')
       setError(undefined)
       try {
-        const input: StartWikiGenerationInput = { mode: confirmation.mode }
-        const next = await ctx.connection.startWikiGeneration(input)
-        setGeneration(next)
-        setStatus(current => current === undefined ? current : { ...current, state: 'generating', activeGenerationId: next.id })
-        setConfirmation(undefined)
+        await ctx.connection.skipWikiInbox(documentId)
+        await loadWorkspace()
       } catch (reason) {
-        setError(errorMessage(reason, '无法启动 Wiki 生成'))
+        setError(errorMessage(reason, '无法跳过这篇文章'))
       } finally {
-        setStarting(false)
+        setBusyDocumentId(undefined)
+        setBusyKind(undefined)
       }
     }
 
     const cancelGeneration = async (): Promise<void> => {
-      if (cancelling) return
+      if (cancelling || generation === undefined) return
       setCancelling(true)
       try {
-        if (generation === undefined) return
         setGeneration(await ctx.connection.cancelWikiGeneration(generation.id))
         await loadWorkspace()
       } catch (reason) {
         setError(errorMessage(reason, '无法取消 Wiki 生成'))
       } finally {
         setCancelling(false)
-      }
-    }
-
-    const confirmPlan = async (): Promise<void> => {
-      if (generation?.state !== 'planned' || confirmingPlan) return
-      setConfirmingPlan(true)
-      setError(undefined)
-      try {
-        setGeneration(await ctx.connection.confirmWikiGeneration(generation.id, {
-          candidateSlugs: selectedCandidateSlugs,
-          archiveSlugs: selectedArchiveSlugs,
-        }))
-      } catch (reason) {
-        setError(errorMessage(reason, '无法确认 Wiki 生成计划'))
-      } finally {
-        setConfirmingPlan(false)
       }
     }
 
@@ -425,7 +430,7 @@ export function apply(ctx: Context): void {
           title: editTitle.trim(),
           summary: editSummary.trim(),
           pageType: page.pageType,
-          status: editStatus,
+          status: page.status === 'draft' ? 'draft' : editStatus,
           aliases: editAliases.split(/[、,\n]/).map(item => item.trim()).filter(Boolean),
           purpose: editPurpose.trim(),
           questions: editQuestions.split('\n').map(item => item.trim()).filter(Boolean),
@@ -442,6 +447,37 @@ export function apply(ctx: Context): void {
         setError(errorMessage(reason, '无法保存 Wiki 页面'))
       } finally {
         setSaving(false)
+      }
+    }
+
+    const unlockPage = async (): Promise<void> => {
+      if (page === undefined || unlocking) return
+      setUnlocking(true)
+      try {
+        const updated = await ctx.connection.unlockWikiPage(page.id, { expectedVersion: page.version })
+        setPage(updated)
+        setPages(items => items.map(item => item.id === updated.id ? updated : item))
+        await loadWorkspace()
+      } catch (reason) {
+        setError(errorMessage(reason, '无法允许自动更新'))
+      } finally {
+        setUnlocking(false)
+      }
+    }
+
+    const publishPage = async (): Promise<void> => {
+      if (page === undefined || publishing) return
+      setPublishing(true)
+      setError(undefined)
+      try {
+        const updated = await ctx.connection.publishWikiPage(page.id, { expectedVersion: page.version })
+        setPage(updated)
+        setPages(items => items.map(item => item.id === updated.id ? updated : item))
+        await loadWorkspace()
+      } catch (reason) {
+        setError(errorMessage(reason, '无法确认收录这个词条'))
+      } finally {
+        setPublishing(false)
       }
     }
 
@@ -477,7 +513,13 @@ export function apply(ctx: Context): void {
     }
 
     const sources = useMemo(() => sourceList(page), [page])
-    const tree = useMemo(() => wikiTree(folders, pages), [folders, pages])
+    const visiblePages = useMemo(() => {
+      const query = treeQuery.trim().toLowerCase()
+      if (query === '') return pages
+      return pages.filter(item => item.title.toLowerCase().includes(query) || item.slug.toLowerCase().includes(query))
+    }, [pages, treeQuery])
+    const tree = useMemo(() => wikiTree(folders, visiblePages), [folders, visiblePages])
+    const groups = useMemo(() => catalogGroups(folders, pages), [folders, pages])
     const relatedPages = useMemo(() => {
       const slugs = new Set([...(page?.outLinks ?? []), ...(page?.inLinks ?? [])])
       return pages.filter(item => slugs.has(item.slug))
@@ -493,113 +535,164 @@ export function apply(ctx: Context): void {
     const progress = generation === undefined || generation.totalSteps <= 0
       ? 0
       : Math.min(100, Math.round(generation.completedSteps / generation.totalSteps * 100))
-    const generated = (status?.pageCount ?? 0) > 0
     const generating = generation !== undefined && ACTIVE_GENERATION_STATES.has(generation.state)
-    const planningReady = generation?.state === 'planned' && generation.plan !== undefined
+    const inbox = status?.inbox ?? []
+    const reviews = status?.reviews ?? []
+    const skipped = status?.skipped ?? []
+    const queued = new Set(status?.queuedDocumentIds ?? [])
+    const activeDocumentId = generation?.plan?.documentId
+    const failed = generation?.state === 'failed'
+    const indexView = page?.pageType === 'index'
 
     return (
       <div className="page wiki-page">
         <header className="page-header">
           <div><p className="eyebrow">AI 知识整理</p><h1>Wiki</h1></div>
-          {generated && (
-            <div className="header-actions">
-              <button className="secondary-button" type="button" disabled={generating || planningReady || estimating !== undefined} onClick={() => void requestGeneration('incremental')}><RefreshCw size={16} />{estimating === 'incremental' ? '估算中...' : '更新 Wiki'}</button>
-              <button className="secondary-button" type="button" disabled={generating || planningReady || estimating !== undefined} onClick={() => void requestGeneration('rebuild')}><RotateCcw size={16} />{estimating === 'rebuild' ? '估算中...' : '完整重建'}</button>
-            </div>
-          )}
         </header>
 
         {status !== undefined && (
           <section className="wiki-summary" aria-label="Wiki 摘要">
             <div><span>知识文档</span><strong>{status.changes.totalDocuments}</strong></div>
-            <div><span>Wiki 页面</span><strong>{status.pageCount}</strong></div>
-            <div><span>待处理变更</span><strong>{status.changes.added + status.changes.updated + status.changes.deleted}</strong></div>
-            <div><span>最近生成</span><strong>{status.lastGeneratedAt === undefined ? '尚未生成' : new Date(status.lastGeneratedAt).toLocaleDateString()}</strong></div>
+            <div><span>Wiki 词条</span><strong>{Math.max(0, status.pageCount - (pages.some(item => item.pageType === 'index') ? 1 : 0))}</strong></div>
+            <div><span>待确认文章</span><strong>{inbox.length}</strong></div>
+            <div><span>待核对词条</span><strong>{reviews.length}</strong></div>
+            <div><span>已跳过文章</span><strong>{skipped.length}</strong></div>
           </section>
         )}
 
         {error !== undefined && <div className="wiki-error" role="alert">{error}</div>}
-        {loading ? (
-          <div className="wiki-state">正在读取 Wiki...</div>
-        ) : status !== undefined && !status.llmConfigured ? (
-          <section className="wiki-empty">
-            <div className="wiki-empty-icon"><Settings size={23} /></div>
-            <h2>先配置 AI 模型</h2>
-            <p>生成 Wiki 需要已配置的提供方、模型和 API Key。配置完成后默认使用首选模型，也可为 Wiki 生成单独指定模型。</p>
-            <button className="primary-button" type="button" onClick={() => ctx.clientApp.selectPage('settings', { panelId: 'llm' })}><Settings size={16} />前往 AI 模型设置</button>
-          </section>
-        ) : !generated && !generating && !planningReady ? (
-          <section className="wiki-empty">
-            <div className="wiki-empty-icon"><Library size={23} /></div>
-            <h2>还没有生成 Wiki</h2>
-            <p>AI 将分析 {status?.changes.totalDocuments ?? 0} 篇知识文档，整理为带来源引用的结构化 Wiki。</p>
-            <button className="primary-button" type="button" disabled={estimating !== undefined} onClick={() => void requestGeneration('initial')}><Library size={16} />{estimating === 'initial' ? '正在估算...' : '生成 Wiki'}</button>
-          </section>
-        ) : generating ? (
-          <section className="wiki-generation" aria-live="polite">
-            <RefreshCw className="wiki-spin" size={24} />
-            <h2>正在生成 Wiki</h2>
-            <p>{generationPhaseLabel(generation.phase)}</p>
-            <div className="wiki-progress" aria-label={`生成进度 ${progress}%`}><span style={{ width: `${progress}%` }} /></div>
-            <div className="wiki-progress-meta"><span>{generation.completedSteps} / {generation.totalSteps} 步</span><span>{progress}%</span></div>
-            {generation.candidateCount !== undefined && <div className="wiki-progress-meta"><span>候选 {generation.candidateCount} 个</span><span>通过 {generation.acceptedCandidateCount ?? 0} 个</span></div>}
-            <button className="secondary-button" type="button" disabled={cancelling} onClick={() => void cancelGeneration()}><Square size={14} />{cancelling ? '正在取消...' : '取消生成'}</button>
-          </section>
-        ) : generation?.state === 'planned' && generation.plan !== undefined ? (
-          <section className="wiki-plan">
+
+        {status !== undefined && !status.llmConfigured && (
+          <div className="wiki-banner warning">
+            <span>生成词条需要先配置 AI 模型。</span>
+            <button className="secondary-button" type="button" onClick={() => ctx.clientApp.selectPage('settings', { panelId: 'llm' })}><Settings size={14} />前往设置</button>
+          </div>
+        )}
+        {generating && generation !== undefined && (
+          <div className="wiki-banner generating" aria-live="polite">
+            <RefreshCw className="wiki-spin" size={14} />
+            <span>{generationPhaseLabel(generation.phase)} · {progress}%</span>
+            <div className="wiki-progress compact" aria-label={`生成进度 ${progress}%`}><span style={{ width: `${progress}%` }} /></div>
+            <button className="secondary-button" type="button" disabled={cancelling} onClick={() => void cancelGeneration()}><Square size={14} />{cancelling ? '正在取消...' : '取消'}</button>
+          </div>
+        )}
+        {failed && !generating && generation?.error !== undefined && (
+          <div className="wiki-banner failed" role="alert">
+            <span>{generation.error}</span>
+            {generation.plan?.documentId !== undefined && status?.llmConfigured === true && (
+              <button className="secondary-button" type="button" disabled={busyDocumentId !== undefined} onClick={() => void acceptDocument(generation.plan!.documentId!)}>重试这篇文章</button>
+            )}
+          </div>
+        )}
+        {inbox.length > 0 && (
+          <section className="wiki-inbox" aria-label="待确认文章">
             <header>
-              <div><p className="eyebrow">写入前预览</p><h2>确认 Wiki 生成计划</h2></div>
-              <span>现有 Wiki 尚未修改</span>
+              <div><p className="eyebrow">按文章确认</p><h2>新文章会自动出现在这里</h2></div>
+              <span>确认后作为后台任务逐篇生成词条</span>
             </header>
-            <div className="wiki-plan-summary">
-              <div><strong>{generation.plan.candidates.length}</strong><span>通过准入的候选</span></div>
-              <div><strong>{generation.plan.preservedPageCount}</strong><span>原样保留词条</span></div>
-              <div><strong>{generation.plan.archivePages.length}</strong><span>建议归档</span></div>
-            </div>
-            <div className="wiki-plan-list">
-              {generation.plan.candidates.map(candidate => {
-                const selected = selectedCandidateSlugs.includes(candidate.slug)
+            <div className="wiki-inbox-list">
+              {inbox.map(item => {
+                const running = generating && activeDocumentId === item.documentId
+                const waiting = queued.has(item.documentId)
                 return (
-                  <label className={`wiki-plan-item ${selected ? 'selected' : ''}`} key={candidate.slug}>
-                    <input type="checkbox" checked={selected} onChange={() => setSelectedCandidateSlugs(items => selected ? items.filter(slug => slug !== candidate.slug) : [...items, candidate.slug])} />
+                  <article key={item.documentId}>
                     <div>
-                      <div className="wiki-plan-title"><strong>{candidate.title}</strong><span>{candidate.action === 'create' ? '新增' : candidate.action === 'restore' ? '恢复' : '更新'} · {pageTypeLabel(candidate.pageType)} · {candidate.score} 分</span></div>
-                      <p>{candidate.purpose}</p>
-                      {candidate.reasons.length > 0 && <small>{candidate.reasons.join('；')}</small>}
-                      <small>来源：{candidate.sourceTitles.join('、') || '未知来源'}</small>
+                      <strong>{item.title}</strong>
+                      <span>{item.libraryName} · {item.change === 'added' ? '新文章' : '内容已更新'}{item.locked ? ' · 词条已锁定' : ''}{running ? ' · 生成中' : waiting ? ' · 排队中' : ''}</span>
                     </div>
-                  </label>
+                    <div className="wiki-inbox-actions">
+                      <button className="secondary-button" type="button" disabled={busyDocumentId !== undefined || running} onClick={() => void skipDocument(item.documentId)}>
+                        {busyDocumentId === item.documentId && busyKind === 'skip' ? '处理中...' : '暂不收录'}
+                      </button>
+                      <button className="primary-button" type="button" disabled={busyDocumentId !== undefined || item.locked || running || waiting || status?.llmConfigured !== true} onClick={() => void acceptDocument(item.documentId)}>
+                        {busyDocumentId === item.documentId && busyKind === 'accept' ? '确认中...' : item.locked ? '请先解锁' : running ? '生成中' : waiting ? '排队中' : '确认生成'}
+                      </button>
+                    </div>
+                  </article>
                 )
               })}
             </div>
-            {generation.plan.archivePages.length > 0 && (
-              <div className="wiki-plan-archive">
-                <h3>建议归档（默认不执行）</h3>
-                <p>仅勾选你确认不再需要的词条。</p>
-                {generation.plan.archivePages.map(candidate => {
-                  const selected = selectedArchiveSlugs.includes(candidate.slug)
-                  return <label key={candidate.slug}><input type="checkbox" checked={selected} onChange={() => setSelectedArchiveSlugs(items => selected ? items.filter(slug => slug !== candidate.slug) : [...items, candidate.slug])} /><span>{candidate.title}</span></label>
-                })}
-              </div>
-            )}
-            <footer>
-              <button className="secondary-button" type="button" disabled={cancelling || confirmingPlan} onClick={() => void cancelGeneration()}>{cancelling ? '取消中...' : '放弃本次计划'}</button>
-              <button className="primary-button" type="button" disabled={confirmingPlan} onClick={() => void confirmPlan()}>{confirmingPlan ? '正在启动...' : `确认生成 ${selectedCandidateSlugs.length} 个词条`}</button>
-            </footer>
           </section>
-        ) : generation?.state === 'failed' && !generated ? (
-          <section className="wiki-empty"><h2>生成失败</h2><p>{generation.error ?? '生成任务未能完成，请重试。'}</p><button className="primary-button" type="button" onClick={() => void requestGeneration('initial')}>重新生成</button></section>
+        )}
+        {reviews.length > 0 && (
+          <section className="wiki-inbox" aria-label="待核对词条">
+            <header>
+              <div><p className="eyebrow">生成后核对</p><h2>新词条需要你确认，也可以先补充</h2></div>
+              <span>确认收录后才会出现在首页分类里</span>
+            </header>
+            <div className="wiki-inbox-list">
+              {reviews.map(item => (
+                <article key={item.id}>
+                  <div>
+                    <strong>{item.title}</strong>
+                    <span>{pageTypeLabel(item.pageType)} · 待核对</span>
+                  </div>
+                  <div className="wiki-inbox-actions">
+                    <button className="primary-button" type="button" onClick={() => setSelectedPageId(item.id)}>去核对</button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          </section>
+        )}
+        {skipped.length > 0 && (
+          <section className="wiki-inbox skipped" aria-label="已跳过文章">
+            <header>
+              <div><p className="eyebrow">暂不收录记录</p><h2>之前跳过的文章还可以重新解析</h2></div>
+              <span>{skipped.length} 篇</span>
+            </header>
+            <div className="wiki-inbox-list">
+              {skipped.map(item => {
+                const running = generating && activeDocumentId === item.documentId
+                const waiting = queued.has(item.documentId)
+                return (
+                  <article key={item.documentId}>
+                    <div>
+                      <strong>{item.title}</strong>
+                      <span>{item.libraryName} · {item.change === 'added' ? '当时是新文章' : '当时内容已更新'} · 跳过于 {new Date(item.skippedAt).toLocaleString()}{item.locked ? ' · 词条已锁定' : ''}{running ? ' · 生成中' : waiting ? ' · 排队中' : ''}</span>
+                    </div>
+                    <div className="wiki-inbox-actions">
+                      <button
+                        className="primary-button"
+                        type="button"
+                        disabled={busyDocumentId !== undefined || item.locked || running || waiting || status?.llmConfigured !== true}
+                        onClick={() => void acceptDocument(item.documentId)}
+                      >
+                        {busyDocumentId === item.documentId && busyKind === 'accept' ? '解析中...' : item.locked ? '请先解锁' : running ? '生成中' : waiting ? '排队中' : '重新解析'}
+                      </button>
+                    </div>
+                  </article>
+                )
+              })}
+            </div>
+          </section>
+        )}
+
+        {loading ? (
+          <div className="wiki-state">正在读取 Wiki...</div>
+        ) : pages.length === 0 ? (
+          <section className="wiki-empty">
+            <div className="wiki-empty-icon"><Library size={23} /></div>
+            <h2>{inbox.length > 0 ? '还没有词条' : skipped.length > 0 ? '这些文章被跳过了' : 'Wiki 还是空的'}</h2>
+            <p>{inbox.length > 0 ? '确认上方文章后，会在后台生成对应词条，不影响你继续阅读。' : skipped.length > 0 ? '可以从上方已跳过记录里重新解析，生成对应词条。' : '知识库出现新文章后，会自动列出待确认词条。'}</p>
+          </section>
         ) : (
           <main className="wiki-workbench">
             <nav className="wiki-tree" aria-label="Wiki 目录">
               <div className="wiki-pane-title">目录</div>
-              {tree.map(node => node.kind === 'folder' ? (
+              <label className="wiki-tree-search">
+                <Search size={13} />
+                <input value={treeQuery} onChange={event => setTreeQuery(event.target.value)} placeholder="搜索词条" />
+              </label>
+              {tree.length === 0 ? <p className="wiki-no-sources">没有匹配的词条。</p> : tree.map(node => node.kind === 'folder' ? (
                 <div className="wiki-folder" key={node.folder.id} style={{ paddingLeft: `${9 + node.depth * 16}px` }}>
                   <FolderClosed size={13} /><span>{node.folder.name}</span>
                 </div>
               ) : (
                 <button className={node.page.id === selectedPageId ? 'active' : ''} key={node.page.id} style={{ paddingLeft: `${12 + node.depth * 16}px` }} type="button" onClick={() => setSelectedPageId(node.page.id)}>
-                  <ChevronRight size={13} /><span>{node.page.title}</span>{node.page.state !== 'ready' && <i />}
+                  <ChevronRight size={13} /><span>{node.page.title}</span>
+                  {node.page.status === 'draft' && <em>待核</em>}
+                  {node.page.state !== 'ready' && <i />}
                 </button>
               ))}
             </nav>
@@ -611,17 +704,51 @@ export function apply(ctx: Context): void {
                   <label><span>词条用途</span><textarea rows={2} value={editPurpose} onChange={event => setEditPurpose(event.target.value)} /></label>
                   <label><span>这个词条应该回答的问题（每行一个）</span><textarea rows={4} value={editQuestions} onChange={event => setEditQuestions(event.target.value)} /></label>
                   <div className="wiki-editor-grid">
-                    <label><span>发布状态</span><select value={editStatus} onChange={event => setEditStatus(event.target.value as WikiPageStatus)}><option value="draft">草稿</option><option value="published">已发布</option><option value="archived">已归档</option></select></label>
+                    {page.status !== 'draft' && (
+                      <label><span>发布状态</span><select value={editStatus} onChange={event => setEditStatus(event.target.value as WikiPageStatus)}><option value="draft">草稿</option><option value="published">已发布</option><option value="archived">已归档</option></select></label>
+                    )}
                     <label><span>别名（逗号分隔）</span><input value={editAliases} onChange={event => setEditAliases(event.target.value)} /></label>
                   </div>
                   {editSections.map((section, sectionIndex) => (
                     <Fragment key={section.id}>
-                      <label><span>章节标题</span><input value={section.title} onChange={event => setEditSections(items => items.map((item, index) => index === sectionIndex ? { ...item, title: event.target.value } : item))} /></label>
+                      <div className="wiki-editor-section-head">
+                        <label><span>章节标题</span><input value={section.title} onChange={event => setEditSections(items => items.map((item, index) => index === sectionIndex ? { ...item, title: event.target.value } : item))} /></label>
+                        {editSections.length > 1 && (
+                          <button className="secondary-button" type="button" onClick={() => setEditSections(items => items.filter((_, index) => index !== sectionIndex))}>删除章节</button>
+                        )}
+                      </div>
                       <label><span>Markdown 内容</span><textarea rows={12} value={section.body} onChange={event => setEditSections(items => items.map((item, index) => index === sectionIndex ? { ...item, body: event.target.value } : item))} /></label>
                     </Fragment>
                   ))}
-                  <div className="wiki-editor-actions"><button className="secondary-button" type="button" disabled={saving} onClick={() => setEditing(false)}>取消</button><button className="primary-button" type="button" disabled={saving || editTitle.trim() === ''} onClick={() => void savePage()}>{saving ? '保存中...' : '保存页面'}</button></div>
+                  <button className="secondary-button" type="button" onClick={() => setEditSections(items => [...items, { id: crypto.randomUUID(), title: '补充', body: '（在此补充）' }])}>
+                    <Plus size={14} />添加章节
+                  </button>
+                  <p className="wiki-lock-note">{page.status === 'draft' ? '保存补充后仍需确认收录。补充内容会锁定，避免被后台覆盖。' : '保存后该词条会锁定，后台生成不会覆盖，直到你允许自动更新。'}</p>
+                  <div className="wiki-editor-actions"><button className="secondary-button" type="button" disabled={saving} onClick={() => setEditing(false)}>取消</button><button className="primary-button" type="button" disabled={saving || editTitle.trim() === ''} onClick={() => void savePage()}>{saving ? '保存中...' : page.status === 'draft' ? '保存补充' : '保存并锁定'}</button></div>
                 </div>
+              ) : indexView ? (
+                <>
+                  <header>
+                    <div>
+                      <h1>词条目录</h1>
+                      <span>按分类浏览，不做额外解释</span>
+                    </div>
+                  </header>
+                  <div className="wiki-catalog">
+                    {groups.length === 0 ? <p className="wiki-no-sources">还没有词条。</p> : groups.map(group => (
+                      <section key={group.name}>
+                        <h2>{group.name}</h2>
+                        <ul>
+                          {group.pages.map(item => (
+                            <li key={item.id}>
+                              <button type="button" onClick={() => setSelectedPageId(item.id)}>{item.title}</button>
+                            </li>
+                          ))}
+                        </ul>
+                      </section>
+                    ))}
+                  </div>
+                </>
               ) : (
                 <>
                   <header>
@@ -631,10 +758,39 @@ export function apply(ctx: Context): void {
                     </div>
                     <div className="wiki-page-actions">
                       <button className="secondary-button" type="button" onClick={() => void openHistory()}><History size={15} />版本</button>
-                      <button className="secondary-button" type="button" onClick={beginEdit}><FileEdit size={15} />编辑</button>
+                      {sources[0] !== undefined && (
+                        <button
+                          className="secondary-button"
+                          type="button"
+                          disabled={generating || busyDocumentId !== undefined || page.state === 'locked' || status?.llmConfigured !== true}
+                          onClick={() => void acceptDocument(sources[0]!.documentId, true)}
+                        >
+                          <RefreshCw size={15} />
+                          {busyDocumentId === sources[0].documentId && busyKind === 'accept' ? '完善中...' : '完善词条'}
+                        </button>
+                      )}
+                      <button className="secondary-button" type="button" onClick={beginEdit}><FileEdit size={15} />{page.status === 'draft' ? '补充' : '编辑'}</button>
+                      {page.status === 'draft' && (
+                        <button className="primary-button" type="button" disabled={publishing} onClick={() => void publishPage()}>
+                          {publishing ? '收录中...' : '确认收录'}
+                        </button>
+                      )}
                     </div>
                   </header>
-                  {page.state === 'source-missing' && <div className="wiki-source-warning">部分来源文档已删除。请更新 Wiki，系统会撤回失效来源贡献。</div>}
+                  {page.status === 'draft' && (
+                    <div className="wiki-banner warning">
+                      <span>这是新生成的词条，请先核对。原文没写清的地方可以补充，确认后才会出现在首页。</span>
+                      <button className="secondary-button" type="button" onClick={beginEdit}><FileEdit size={14} />补充</button>
+                      <button className="primary-button" type="button" disabled={publishing} onClick={() => void publishPage()}>{publishing ? '收录中...' : '确认收录'}</button>
+                    </div>
+                  )}
+                  {page.state === 'locked' && (
+                    <div className="wiki-banner warning">
+                      <span>该词条已锁定，确认文章更新时不会自动覆盖。需要后台更新时，先允许自动更新。</span>
+                      <button className="secondary-button" type="button" disabled={unlocking} onClick={() => void unlockPage()}><Unlock size={14} />{unlocking ? '解锁中...' : '允许自动更新'}</button>
+                    </div>
+                  )}
+                  {page.state === 'source-missing' && <div className="wiki-source-warning">部分来源文档已删除。请确认剩余文章后重新生成，或手动修订。</div>}
                   {page.summary !== '' && <p className="wiki-page-summary">{page.summary}</p>}
                   {page.purpose !== '' && <div className="wiki-purpose"><strong>词条用途</strong><p>{page.purpose}</p></div>}
                   {page.questions.length > 0 && <div className="wiki-questions"><strong>它应该回答</strong><ul>{page.questions.map(question => <li key={question}>{question}</li>)}</ul></div>}
@@ -644,7 +800,7 @@ export function apply(ctx: Context): void {
             </article>
             <aside className="wiki-sources">
               <div className="wiki-pane-title">来源 · {sources.length}</div>
-              {sources.length === 0 ? <p className="wiki-no-sources">当前页面没有来源记录。</p> : sources.map(source => (
+              {indexView || sources.length === 0 ? <p className="wiki-no-sources">{indexView ? '首页按分类列出词条，不绑定来源文档。' : '当前页面没有来源记录。'}</p> : sources.map(source => (
                 <a href={source.referenceUri} key={source.documentId} onClick={event => {
                   event.preventDefault()
                   ctx.clientApp.selectPage('documents', { libraryId: source.libraryId, documentId: source.documentId })
@@ -662,19 +818,6 @@ export function apply(ctx: Context): void {
           </main>
         )}
 
-        {confirmation !== undefined && (
-          <div className="wiki-dialog-backdrop">
-            <section className="wiki-dialog" role="dialog" aria-modal="true" aria-labelledby="wiki-confirm-title">
-              <header><div><p className="eyebrow">生成确认</p><h2 id="wiki-confirm-title">{confirmation.mode === 'rebuild' ? '完整重建 Wiki？' : confirmation.mode === 'initial' ? '生成 Wiki？' : '更新 Wiki？'}</h2></div><button type="button" disabled={starting} title="关闭" onClick={() => setConfirmation(undefined)}><X size={18} /></button></header>
-              <div className="wiki-dialog-body">
-                <p>本次将处理 <strong>{confirmation.estimate.documentsToProcess}</strong> 篇文档，预计使用 <strong>{confirmation.estimate.estimatedInputTokens.toLocaleString()}</strong> 个输入 token。</p>
-                <dl><div><dt>新增</dt><dd>{confirmation.estimate.changes.added}</dd></div><div><dt>更新</dt><dd>{confirmation.estimate.changes.updated}</dd></div><div><dt>删除</dt><dd>{confirmation.estimate.changes.deleted}</dd></div></dl>
-                {confirmation.mode === 'rebuild' && <p className="wiki-dialog-warning">完整重建会重新生成全部 Wiki 页面，但不会修改原始知识文档。</p>}
-              </div>
-              <footer><button className="secondary-button" type="button" disabled={starting} onClick={() => setConfirmation(undefined)}>取消</button><button className="primary-button" type="button" disabled={starting} onClick={() => void startGeneration()}>{starting ? '正在启动...' : '确认生成'}</button></footer>
-            </section>
-          </div>
-        )}
         {historyOpen && page !== undefined && (
           <div className="wiki-dialog-backdrop">
             <section className="wiki-dialog wiki-history-dialog" role="dialog" aria-modal="true" aria-labelledby="wiki-history-title">

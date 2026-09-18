@@ -28,6 +28,9 @@
     - id: pdf-producer
       name: '@tiggyknowledge/producer-pdf'
 
+    - id: url-producer
+      name: '@tiggyknowledge/producer-url'
+
     - id: basic-chunker
       name: '@tiggyknowledge/chunker-basic'
 
@@ -45,6 +48,9 @@
     - id: pdf-preview
       name: '@tiggyknowledge/preview-pdf'
 
+    - id: url-preview
+      name: '@tiggyknowledge/preview-url'
+
     - id: knowledge-documents
       name: '@tiggyknowledge/documents'
 
@@ -60,6 +66,9 @@
 
     - id: note-creator
       name: '@tiggyknowledge/note-creator'
+
+    - id: url-creator
+      name: '@tiggyknowledge/url-creator'
 
     - id: knowledge-okf
       name: '@tiggyknowledge/okf'
@@ -103,16 +112,10 @@
     - id: library-chat
       name: '@tiggyknowledge/library-chat'
 
-    - id: library-chat-api
-      name: '@tiggyknowledge/library-chat-api'
-
     - id: wiki-governance
       name: '@tiggyknowledge/wiki-governance'
       config:
         dataDir: !!js ctx.dataRoot
-
-    - id: wiki-governance-api
-      name: '@tiggyknowledge/wiki-governance-api'
 
     - id: storage-manager
       name: '@tiggyknowledge/storage-manager'
@@ -129,86 +132,10 @@
             moduleName: '@tiggyknowledge/client-runtime'
             label: Runtime
             description: Page registry and client runtime state
-          - id: client-ui-knowledge
-            moduleName: '@tiggyknowledge/client-ui-knowledge'
-            label: Knowledge
-            description: Knowledge library workbench
-          - id: client-note-create
-            moduleName: '@tiggyknowledge/client-note-create'
-            label: Note Creator
-            description: Markdown knowledge note creation
-          - id: client-ui-ingestion
-            moduleName: '@tiggyknowledge/client-ui-ingestion'
-            label: Ingestion
-            description: Batch upload workbench
-          - id: client-ui-documents
-            moduleName: '@tiggyknowledge/client-ui-documents'
-            label: Documents
-            description: Document list and preview workbench
-          - id: client-library-chat
-            moduleName: '@tiggyknowledge/client-library-chat'
-            label: Library Chat
-            description: Knowledge library grounded question answering
-          - id: client-inspector-okf
-            moduleName: '@tiggyknowledge/client-inspector-okf'
-            label: OKF Inspector
-            description: Runtime OKF concept and source mapping
-          - id: client-action-okf-export
-            moduleName: '@tiggyknowledge/client-action-okf-export'
-            label: OKF Export
-            description: Knowledge library OKF Bundle export action
-          - id: client-preview-pdf
-            moduleName: '@tiggyknowledge/client-preview-pdf'
-            label: PDF Preview
-            description: Visual PDF page renderer
-          - id: client-ui-tags
-            moduleName: '@tiggyknowledge/client-ui-tags'
-            label: Tags
-            description: Tag browser and filtered documents
-          - id: client-ui-favorites
-            moduleName: '@tiggyknowledge/client-ui-favorites'
-            label: Favorites
-            description: Favorite documents workbench
-          - id: client-ui-search
-            moduleName: '@tiggyknowledge/client-ui-search'
-            label: Search
-            description: Keyword search workbench
-          - id: client-ui-wiki
-            moduleName: '@tiggyknowledge/client-ui-wiki'
-            label: LLM Wiki
-            description: Global generated knowledge wiki
-          - id: client-wiki-governance
-            moduleName: '@tiggyknowledge/client-wiki-governance'
-            label: Wiki Governance
-            description: Personal wiki versions, issues, lint, and recycle bin
           - id: client-ui-settings
             moduleName: '@tiggyknowledge/client-ui-settings'
             label: Settings
             description: Settings page shell
-          - id: client-settings-general
-            moduleName: '@tiggyknowledge/client-settings-general'
-            label: General Settings
-            description: General settings panel
-          - id: client-settings-storage
-            moduleName: '@tiggyknowledge/client-settings-storage'
-            label: Storage Settings
-            description: Local storage settings panel
-          - id: client-settings-config
-            moduleName: '@tiggyknowledge/client-settings-config'
-            label: Plugin Configuration
-            description: Plugin configuration panel
-          - id: client-settings-dsh-integration
-            moduleName: '@tiggyknowledge/client-settings-dsh-integration'
-            label: 智能体集成
-            description: 智能体接入与只读知识库配置
-          - id: client-settings-llm
-            moduleName: '@tiggyknowledge/client-settings-llm'
-            label: AI 模型
-            description: OpenAI 兼容模型配置
-          - id: client-settings-plugins
-            moduleName: '@tiggyknowledge/client-settings-plugins'
-            label: Plugin Inventory
-            description: Plugin inventory settings panel
           - id: client-ui-layout
             moduleName: '@tiggyknowledge/client-ui-layout'
             label: Layout
@@ -216,6 +143,12 @@
 
     - id: plugin-inventory
       name: '@tiggyknowledge/plugin-inventory'
+
+    - id: external-plugins
+      name: '@tiggyknowledge/external-plugins'
+
+    - id: agent-api
+      name: '@tiggyknowledge/agent-api'
 
     - id: webserver
       name: '@tiggyknowledge/webserver'

@@ -2,6 +2,7 @@ import { Context, Service } from '@deepseek-ai/cordis'
 import type {} from '@tiggyknowledge/document-metadata'
 import type { IngestionFile } from '@tiggyknowledge/ingestion'
 import type { IngestionBatchResult } from '@tiggyknowledge/contracts'
+import { contributeSurface, httpFromRange, pathSegment } from '@tiggyknowledge/plugin-surface'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -14,6 +15,22 @@ export class TaggedIngestion extends Service {
 
   constructor(ctx: Context) {
     super(ctx, 'knowledgeTaggedIngestion')
+    contributeSurface(ctx, {
+      routes: [{
+        id: 'ingestion:imports',
+        methods: ['POST'],
+        path: /^\/api\/libraries\/([^/]+)\/imports$/,
+        handler: async ({ assertSameOrigin, json, match, readUpload }) => {
+          assertSameOrigin()
+          const upload = await readUpload()
+          try {
+            json(await this.ingest(pathSegment(match), upload.files, upload.tagNames))
+          } catch (error) {
+            throw httpFromRange(error, 'invalid_ingestion')
+          }
+        },
+      }],
+    })
   }
 
   async ingest(libraryId: string, files: IngestionFile[], tagNames: string[]): Promise<IngestionBatchResult> {

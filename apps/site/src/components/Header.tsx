@@ -14,6 +14,7 @@ export function Header(): JSX.Element {
         </NavLink>
         <nav aria-label="主导航">
           <NavLink to="/docs">文档</NavLink>
+          <NavLink to="/docs/plugins">插件</NavLink>
           <NavLink to="/docs/roadmap">规划</NavLink>
           <NavLink to="/download">下载</NavLink>
           <a className="github-link" href={GITHUB_URL} rel="noreferrer" target="_blank">

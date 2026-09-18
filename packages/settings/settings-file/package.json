@@ -15,11 +15,13 @@
     "js-yaml": "^4.1.0"
   },
   "peerDependencies": {
-    "@deepseek-ai/cordis": "workspace:^"
+    "@deepseek-ai/cordis": "workspace:^",
+    "@tiggyknowledge/plugin-surface": "workspace:^"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "workspace:^",
     "@types/js-yaml": "^4.0.9",
-    "@tiggyknowledge/contracts": "workspace:^"
+    "@tiggyknowledge/contracts": "workspace:^",
+    "@tiggyknowledge/plugin-surface": "workspace:^"
   }
 }

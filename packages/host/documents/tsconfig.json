@@ -1,15 +1,45 @@
 {
   "extends": "../../../tsconfig.base.json",
-  "compilerOptions": { "rootDir": "src", "outDir": "lib/types" },
-  "include": ["src"],
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "lib/types"
+  },
+  "include": [
+    "src"
+  ],
   "references": [
-    { "path": "../../../vendor/cosmokit" },
-    { "path": "../../../vendor/cordis" },
-    { "path": "../../core/contracts" },
-    { "path": "../../storage/catalog-sqlite" },
-    { "path": "../chunker-basic" },
-    { "path": "../../storage/content-local" },
-    { "path": "../index-fts" },
-    { "path": "../graph" }
+    {
+      "path": "../../../vendor/cosmokit"
+    },
+    {
+      "path": "../../../vendor/cordis"
+    },
+    {
+      "path": "../../core/contracts"
+    },
+    {
+      "path": "../../storage/catalog-sqlite"
+    },
+    {
+      "path": "../chunker-basic"
+    },
+    {
+      "path": "../../storage/content-local"
+    },
+    {
+      "path": "../index-fts"
+    },
+    {
+      "path": "../document-metadata"
+    },
+    {
+      "path": "../producer-url"
+    },
+    {
+      "path": "../graph"
+    },
+    {
+      "path": "../plugin-surface"
+    }
   ]
 }

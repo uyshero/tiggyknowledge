@@ -4,6 +4,7 @@ import type {} from '@tiggyknowledge/chunker-basic'
 import type {} from '@tiggyknowledge/content-local'
 import type { IngestionBatchResult, IngestionFileResult } from '@tiggyknowledge/contracts'
 import type {} from '@tiggyknowledge/index-fts'
+import { contributeSurface } from '@tiggyknowledge/plugin-surface'
 import type {} from '@tiggyknowledge/producer-text'
 
 declare module '@deepseek-ai/cordis' {
@@ -22,6 +23,14 @@ export class KnowledgeIngestion extends Service {
 
   constructor(ctx: Context) {
     super(ctx, 'knowledgeIngestion')
+    contributeSurface(ctx, {
+      clients: [{
+        id: 'client-ui-ingestion',
+        moduleName: '@tiggyknowledge/client-ui-ingestion',
+        label: 'Ingestion',
+        description: 'Batch upload workbench',
+      }],
+    })
   }
 
   async ingest(libraryId: string, files: IngestionFile[]): Promise<IngestionBatchResult> {

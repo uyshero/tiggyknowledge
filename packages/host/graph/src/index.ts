@@ -4,6 +4,7 @@ import type {} from '@tiggyknowledge/catalog-sqlite'
 import type {} from '@tiggyknowledge/document-metadata'
 import type { KnowledgeDocument, KnowledgeGraphEdge, KnowledgeGraphNode, KnowledgeGraphQuery, KnowledgeGraphResponse, KnowledgeTag } from '@tiggyknowledge/contracts'
 import type {} from '@tiggyknowledge/preview-text'
+import { contributeSurface, httpFromRange, pathSegment } from '@tiggyknowledge/plugin-surface'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -116,6 +117,30 @@ export class KnowledgeGraph extends Service {
   constructor(ctx: Context) {
     super(ctx, 'knowledgeGraph')
     ctx.on('knowledge/graph/invalidate', () => this.invalidate())
+    contributeSurface(ctx, {
+      routes: [
+        {
+          id: 'graph:snapshot',
+          methods: ['GET'],
+          path: '/api/graph',
+          handler: async ({ url, json }) => {
+            json(await this.snapshot(graphQuery(url)))
+          },
+        },
+        {
+          id: 'graph:document',
+          methods: ['GET'],
+          path: /^\/api\/documents\/([^/]+)\/graph$/,
+          handler: async ({ url, json, match }) => {
+            try {
+              json(await this.document(pathSegment(match), graphQuery(url)))
+            } catch (error) {
+              throw httpFromRange(error, 'document_not_found')
+            }
+          },
+        },
+      ],
+    })
   }
 
   invalidate(): void {
@@ -333,6 +358,16 @@ export class KnowledgeGraph extends Service {
       incoming,
     }
   }
+}
+
+function graphQuery(url: URL): KnowledgeGraphQuery {
+  const query: KnowledgeGraphQuery = {}
+  const libraryId = url.searchParams.get('libraryId')
+  if (libraryId !== null && libraryId.length > 0) query.libraryId = libraryId
+  const depth = url.searchParams.get('depth')
+  if (depth !== null) query.depth = Number(depth)
+  if (url.searchParams.get('includeMissing') === 'false') query.includeMissing = false
+  return query
 }
 
 export default KnowledgeGraph

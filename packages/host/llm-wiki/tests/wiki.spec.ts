@@ -12,99 +12,30 @@ import { describe, expect, it, vi } from 'vitest'
 import LlmWiki from '../src/index.ts'
 
 describe('LLM Wiki generation', () => {
-  it('summarizes sources, synthesizes cited pages, and skips unchanged incremental work', async () => {
+  it('confirms one document at a time and generates a cited page in the background', async () => {
     const dataDir = mkdtempSync(join(tmpdir(), 'tiggyknowledge-llm-wiki-'))
     const ctx = new Context()
     const complete = vi.fn()
       .mockResolvedValueOnce({ content: '这是一篇测试文档的摘要。', inputTokens: 20, outputTokens: 8 })
-      .mockImplementationOnce(async input => {
-        const userContent = input.messages.at(-1)?.content ?? ''
-        const payload = JSON.parse(userContent) as { documents: Array<{ documentId: string }> }
-        const documentId = payload.documents[0]?.documentId
-        return {
-          content: JSON.stringify({
-          candidates: [
-            {
-              title: '测试总览',
-              slug: 'overview',
-              pageType: 'concept',
-              aliases: ['测试主题'],
-              purpose: '帮助理解并复用测试主题的核心知识。',
-              questions: ['测试主题包含哪些核心事实？'],
-              folderPath: ['概念'],
-              sourceDocumentIds: [documentId],
-              factCount: 4,
-              referencePotential: 2,
-              stableIdentity: true,
-              transient: false,
-              estimatedCharacters: 400,
-              reasons: ['可独立解释'],
-            },
-            {
-              title: '测试主题',
-              slug: 'testing-topic',
-              pageType: 'concept',
-              aliases: ['测试总览'],
-              purpose: '提供测试主题的统一概念解释。',
-              questions: ['测试主题是什么意思？'],
-              folderPath: ['概念'],
-              sourceDocumentIds: [documentId],
-              factCount: 3,
-              referencePotential: 2,
-              stableIdentity: true,
-              transient: false,
-              estimatedCharacters: 300,
-              reasons: ['可被引用'],
-            },
-            {
-              title: '临时通知',
-              slug: 'temporary-notice',
-              pageType: 'concept',
-              aliases: [],
-              purpose: '记录一次性临时信息。',
-              questions: ['临时通知是什么？'],
-              folderPath: ['其他'],
-              sourceDocumentIds: [documentId],
-              factCount: 1,
-              referencePotential: 0,
-              stableIdentity: false,
-              transient: true,
-              estimatedCharacters: 80,
-              reasons: ['一次性内容'],
-            },
-          ],
-          }),
-          inputTokens: 5,
-          outputTokens: 7,
-        }
-      })
       .mockResolvedValueOnce({ content: '{"pages":[', inputTokens: 1, outputTokens: 4_000 })
       .mockImplementationOnce(async input => {
         const userContent = input.messages.at(-1)?.content ?? ''
-        const payload = JSON.parse(userContent) as { documents: Array<{ documentId: string }> }
+        const payload = JSON.parse(userContent) as { document: { documentId: string, title: string } }
         return {
           content: JSON.stringify({
             pages: [{
               title: '测试总览',
-              slug: 'overview',
-              pageType: 'concept',
+              slug: 'topic/overview',
+              pageType: 'topic',
               aliases: ['测试主题'],
+              purpose: '帮助理解测试主题。',
+              questions: ['测试主题包含哪些核心事实？'],
+              folderPath: ['其他'],
               parentSlug: null,
               sections: [{
                 title: '核心内容',
                 body: '由测试文档生成的 Wiki 正文。',
-                sourceDocumentIds: [payload.documents[0]?.documentId],
-              }],
-            }, {
-              title: '测试主题',
-              slug: 'testing-topic',
-              pageType: 'concept',
-              aliases: ['测试总览'],
-              parentSlug: null,
-              sections: [{
-                title: '补充内容',
-                body: '这是同义名称下的补充内容。',
-                sourceDocumentIds: [payload.documents[0]?.documentId],
+                sourceDocumentIds: [payload.document.documentId],
               }],
             }],
           }),
@@ -126,7 +57,7 @@ describe('LLM Wiki generation', () => {
       await ctx.plugin(WikiSqlite, { dataDir })
       ctx.wikiStorage.createGeneration({
         id: 'interrupted-generation',
-        mode: 'initial',
+        mode: 'document',
         state: 'running',
         phase: 'summarizing',
         totalSteps: 2,
@@ -168,63 +99,83 @@ describe('LLM Wiki generation', () => {
         sizeBytes: asset.sizeBytes,
       })
 
-      const generation = ctx.llmWiki.start({ mode: 'initial' })
-      await vi.waitFor(() => expect(ctx.llmWiki.generation(generation.id).state).toBe('planned'))
-      const plan = ctx.llmWiki.generation(generation.id).plan
-      expect(plan).toMatchObject({ candidates: [{ title: '测试总览', action: 'create' }] })
-      ctx.llmWiki.confirm(generation.id, { candidateSlugs: plan?.candidates.map(candidate => candidate.slug) ?? [] })
+      expect(ctx.llmWiki.status().inbox).toEqual([expect.objectContaining({
+        documentId: document.id,
+        change: 'added',
+        locked: false,
+      })])
+      expect(() => ctx.llmWiki.start({})).toThrow('请确认一篇知识文章后再生成词条')
+      expect(() => ctx.llmWiki.confirm('interrupted-generation', { candidateSlugs: [] })).toThrow('按文章确认')
+
+      const skipped = ctx.llmWiki.skipDocument(document.id)
+      expect(skipped).toEqual([])
+      expect(ctx.llmWiki.status()).toMatchObject({
+        inbox: [],
+        skipped: [expect.objectContaining({
+          documentId: document.id,
+          title: '测试文档',
+          skippedAt: expect.any(String),
+        })],
+      })
+
+      const replacement = ctx.knowledgeContent.save(new TextEncoder().encode('# 测试文档\n\n更新后的事实。'))
+      ctx.knowledgeCatalog.registerAsset(replacement)
+      ctx.knowledgeCatalog.updateDocument(document.id, {
+        sourceAssetId: replacement.id,
+        contentHash: replacement.contentHash,
+        sizeBytes: replacement.sizeBytes,
+      })
+      expect(ctx.llmWiki.status()).toMatchObject({
+        inbox: [expect.objectContaining({ documentId: document.id, change: 'added' })],
+        skipped: [],
+      })
+      ctx.llmWiki.skipDocument(document.id)
+      expect(ctx.llmWiki.status()).toMatchObject({
+        inbox: [],
+        skipped: [expect.objectContaining({ documentId: document.id })],
+      })
+
+      const generation = ctx.llmWiki.start({ documentId: document.id })
       await vi.waitFor(() => expect(ctx.llmWiki.generation(generation.id).state).toBe('completed'))
       expect(ctx.llmWiki.generation(generation.id)).toMatchObject({
-        completedSteps: 3,
-        inputTokens: 36,
-        outputTokens: 4_030,
-        candidateCount: 2,
-        acceptedCandidateCount: 1,
+        mode: 'document',
+        completedSteps: 2,
+        inputTokens: 31,
+        outputTokens: 4_023,
       })
       expect(ctx.llmWiki.pages()).toEqual(expect.arrayContaining([
         expect.objectContaining({ slug: 'index', pageType: 'index' }),
-        expect.objectContaining({ slug: 'concept/overview', title: '测试总览' }),
+        expect.objectContaining({ title: '测试总览' }),
       ]))
-      expect(ctx.llmWiki.folders()).toMatchObject([{ name: '概念', depth: 0 }])
-      expect(ctx.llmWiki.page('concept/overview')).toMatchObject({
-        aliases: ['测试主题'],
-        purpose: '帮助理解并复用测试主题的核心知识。',
-        questions: ['测试主题包含哪些核心事实？', '测试主题是什么意思？'],
-        sections: [
-          { sources: [{ documentId: document.id, libraryId: library.id }] },
-          { title: '补充内容' },
-        ],
+      const topic = ctx.llmWiki.pages().find(page => page.pageType !== 'index')
+      expect(topic).toMatchObject({ folderId: expect.any(String), status: 'draft' })
+      expect(ctx.llmWiki.page('index')).toMatchObject({ pageType: 'index', status: 'published' })
+      expect(ctx.llmWiki.page('index').sections[0]?.body).toContain('## Wiki 测试库')
+      expect(ctx.llmWiki.page('index').sections[0]?.body).toContain(topic?.title)
+      expect(ctx.llmWiki.page(topic!.slug)).toMatchObject({
+        status: 'draft',
+        sections: [{ sources: [{ documentId: document.id, libraryId: library.id }] }],
       })
-      expect(ctx.llmWiki.status()).toMatchObject({ state: 'ready', pageCount: 2 })
-      expect(ctx.llmWiki.status().lastGeneration).toMatchObject({ id: generation.id, state: 'completed' })
-      expect(complete.mock.calls[0]?.[0]).toMatchObject({ maxAttempts: 3 })
-      expect(complete.mock.calls[1]?.[0]).toMatchObject({
-        maxAttempts: 3,
-        settings: { requestTimeoutMs: 180_000 },
+      expect(ctx.llmWiki.status()).toMatchObject({
+        state: 'awaiting-confirmation',
+        inbox: [],
+        skipped: [],
+        queuedDocumentIds: [],
+        reviews: [expect.objectContaining({ id: topic!.id, status: 'draft' })],
       })
-      expect(complete.mock.calls[2]?.[0]).toMatchObject({
-        maxAttempts: 3,
-        settings: { requestTimeoutMs: 180_000 },
-      })
-      expect(complete.mock.calls[3]?.[0]).toMatchObject({
-        maxAttempts: 2,
-        settings: { requestTimeoutMs: 180_000 },
-      })
-
-      const incremental = ctx.llmWiki.start({ mode: 'incremental' })
-      await vi.waitFor(() => expect(ctx.llmWiki.generation(incremental.id).state).toBe('completed'))
-      expect(ctx.llmWiki.generation(incremental.id).totalSteps).toBe(0)
-      expect(complete).toHaveBeenCalledTimes(4)
+      expect(ctx.llmWiki.publishPage(topic!.id, topic!.version)).toMatchObject({ status: 'published' })
+      expect(ctx.llmWiki.status()).toMatchObject({ state: 'ready', reviews: [] })
+      expect(() => ctx.llmWiki.start({ documentId: document.id })).toThrow('该文章对应的词条已是最新')
+      expect(complete).toHaveBeenCalledTimes(3)
     } finally {
       await ctx.fiber.dispose()
       rmSync(dataDir, { recursive: true, force: true })
     }
   })
 
-  it('preserves unrelated pages during incremental updates', async () => {
+  it('preserves unrelated pages when confirming another document', async () => {
     const dataDir = mkdtempSync(join(tmpdir(), 'tiggyknowledge-llm-wiki-incremental-'))
     const ctx = new Context()
-    let omitBetaCandidate = false
     const complete = vi.fn(async input => {
       const system = input.messages[0]?.content ?? ''
       const user = input.messages.at(-1)?.content ?? ''
@@ -232,55 +183,26 @@ describe('LLM Wiki generation', () => {
         return { content: `摘要-${user.slice(0, 80)}`, inputTokens: 10, outputTokens: 5 }
       }
       const payload = JSON.parse(user) as {
-        documents: Array<{ documentId: string, title: string, contentHash: string }>
-        acceptedCandidates?: Array<{
-          title: string
-          slug: string
-          pageType: string
-          aliases: string[]
-          purpose: string
-          questions: string[]
-          folderPath: string[]
-          sourceDocumentIds: string[]
-        }>
+        document: { documentId: string, title: string, contentHash: string }
+        existingSlug?: string | null
       }
-      if (system.includes('词条规划器')) {
-        return {
-          content: JSON.stringify({
-            candidates: payload.documents.filter(document => !(omitBetaCandidate && document.title === 'Beta')).map(document => ({
-              title: document.title,
-              slug: `entity/${document.title.toLowerCase()}`,
-              pageType: 'entity',
-              aliases: [],
-              purpose: `持续维护${document.title}的独立事实和变化。`,
-              questions: [`${document.title}目前有哪些核心事实？`],
-              folderPath: ['实体'],
-              sourceDocumentIds: [document.documentId],
-              factCount: 3,
-              referencePotential: 2,
-              stableIdentity: true,
-              transient: false,
-              estimatedCharacters: 300,
-              reasons: ['稳定且可复用'],
-            })),
-          }),
-          inputTokens: 10,
-          outputTokens: 10,
-        }
-      }
-      const documentById = new Map(payload.documents.map(document => [document.documentId, document]))
       return {
         content: JSON.stringify({
-          pages: (payload.acceptedCandidates ?? []).map(candidate => ({
-            ...candidate,
-            summary: `${candidate.title}摘要`,
+          pages: [{
+            title: payload.document.title,
+            slug: payload.existingSlug || `topic/${payload.document.title.toLowerCase()}`,
+            pageType: 'topic',
+            aliases: [],
+            purpose: `维护${payload.document.title}。`,
+            questions: [`${payload.document.title}有哪些核心事实？`],
+            folderPath: ['其他'],
             parentSlug: null,
             sections: [{
               title: '核心内容',
-              body: `内容版本-${documentById.get(candidate.sourceDocumentIds[0] ?? '')?.contentHash}`,
-              sourceDocumentIds: candidate.sourceDocumentIds,
+              body: `内容版本-${payload.document.contentHash}`,
+              sourceDocumentIds: [payload.document.documentId],
             }],
-          })),
+          }],
         }),
         inputTokens: 10,
         outputTokens: 10,
@@ -325,20 +247,22 @@ describe('LLM Wiki generation', () => {
         })
       }
       const documentA = createDocument('Alpha', 'Alpha 初始内容')
-      createDocument('Beta', 'Beta 不相关内容')
-      const approve = async (generationId: string, approveArchive = false): Promise<void> => {
-        await vi.waitFor(() => expect(ctx.llmWiki.generation(generationId).state).toBe('planned'))
-        const plan = ctx.llmWiki.generation(generationId).plan
-        ctx.llmWiki.confirm(generationId, {
-          candidateSlugs: plan?.candidates.map(candidate => candidate.slug) ?? [],
-          ...(approveArchive ? { archiveSlugs: plan?.archivePages.map(page => page.slug) ?? [] } : {}),
-        })
-        await vi.waitFor(() => expect(ctx.llmWiki.generation(generationId).state).toBe('completed'))
+      const documentB = createDocument('Beta', 'Beta 不相关内容')
+      const run = async (documentId: string): Promise<void> => {
+        const generation = ctx.llmWiki.start({ documentId })
+        await vi.waitFor(() => expect(ctx.llmWiki.generation(generation.id).state).toBe('completed'))
       }
-      const initial = ctx.llmWiki.start({ mode: 'initial' })
-      await approve(initial.id)
-      const betaBefore = ctx.llmWiki.page('entity/beta')
-      const alphaBefore = ctx.llmWiki.page('entity/alpha')
+
+      expect(ctx.llmWiki.status().inbox).toHaveLength(2)
+      await run(documentA.id)
+      expect(ctx.llmWiki.status().inbox.map(item => item.documentId)).toEqual([documentB.id])
+      const alpha = ctx.llmWiki.pages().find(page => page.title === 'Alpha')
+      expect(alpha).toBeDefined()
+      expect(ctx.llmWiki.pages().some(page => page.title === 'Beta')).toBe(false)
+
+      await run(documentB.id)
+      const betaBefore = ctx.llmWiki.page(ctx.llmWiki.pages().find(page => page.title === 'Beta')!.id)
+      const alphaBefore = ctx.llmWiki.page(alpha!.id)
 
       const replacement = ctx.knowledgeContent.save(new TextEncoder().encode('Alpha 更新内容'))
       ctx.knowledgeCatalog.registerAsset(replacement)
@@ -347,47 +271,38 @@ describe('LLM Wiki generation', () => {
         contentHash: replacement.contentHash,
         sizeBytes: replacement.sizeBytes,
       })
-      const incremental = ctx.llmWiki.start({ mode: 'incremental' })
-      await vi.waitFor(() => expect(ctx.llmWiki.generation(incremental.id).state).toBe('planned'))
-      expect(ctx.llmWiki.status().changes.updated).toBe(1)
-      expect(ctx.llmWiki.page('entity/alpha')).toMatchObject({
-        version: alphaBefore.version,
-        sections: [{ body: alphaBefore.sections[0]?.body }],
+      expect(ctx.llmWiki.status().inbox).toEqual([expect.objectContaining({ documentId: documentA.id, change: 'updated' })])
+
+      ctx.llmWiki.updatePage(alphaBefore.id, {
+        title: alphaBefore.title,
+        summary: alphaBefore.summary,
+        pageType: alphaBefore.pageType,
+        status: alphaBefore.status,
+        aliases: alphaBefore.aliases,
+        purpose: alphaBefore.purpose,
+        questions: alphaBefore.questions,
+        expectedVersion: alphaBefore.version,
+        sections: alphaBefore.sections.map(section => ({ id: section.id, title: section.title, body: section.body })),
       })
-      await approve(incremental.id)
-      const betaAfter = ctx.llmWiki.page('entity/beta')
-      const alphaAfter = ctx.llmWiki.page('entity/alpha')
+      expect(ctx.llmWiki.status().inbox[0]).toMatchObject({ documentId: documentA.id, locked: true })
+      expect(() => ctx.llmWiki.start({ documentId: documentA.id })).toThrow('该词条已锁定')
+      ctx.llmWiki.unlockPage(alphaBefore.id, ctx.llmWiki.page(alphaBefore.id).version)
+      await run(documentA.id)
+
+      const betaAfter = ctx.llmWiki.page(betaBefore.id)
+      const alphaAfter = ctx.llmWiki.page(alphaBefore.id)
       expect(betaAfter).toMatchObject({
         version: betaBefore.version,
         updatedAt: betaBefore.updatedAt,
         sections: [{ body: betaBefore.sections[0]?.body }],
       })
-      expect(alphaAfter.version).toBeGreaterThan(alphaBefore.version)
       expect(alphaAfter.sections[0]?.body).toContain(replacement.contentHash)
-      const planningCalls = complete.mock.calls.filter(([call]) => call.messages[0]?.content.includes('词条规划器'))
-      const incrementalPlanning = JSON.parse(planningCalls.at(-1)?.[0].messages.at(-1)?.content ?? '{}') as { documents: unknown[] }
-      expect(incrementalPlanning.documents).toHaveLength(1)
-
-      omitBetaCandidate = true
-      const rebuild = ctx.llmWiki.start({ mode: 'rebuild' })
-      await approve(rebuild.id)
-      expect(ctx.llmWiki.pages().some(page => page.slug === 'entity/beta')).toBe(true)
-      expect(ctx.llmWiki.page('entity/beta')).toMatchObject({
-        version: betaBefore.version,
-        updatedAt: betaBefore.updatedAt,
-      })
-
-      const callsBeforeDeletion = complete.mock.calls.length
-      ctx.knowledgeCatalog.deleteDocuments([documentA.id])
-      const deletion = ctx.llmWiki.start({ mode: 'incremental' })
-      await approve(deletion.id, true)
-      expect(ctx.llmWiki.pages().some(page => page.slug === 'entity/alpha')).toBe(false)
-      expect(ctx.llmWiki.page('entity/alpha').status).toBe('archived')
-      expect(ctx.llmWiki.page('entity/beta')).toMatchObject({
-        version: betaBefore.version,
-        updatedAt: betaBefore.updatedAt,
-      })
-      expect(complete).toHaveBeenCalledTimes(callsBeforeDeletion)
+      expect(ctx.llmWiki.page('index').sections[0]?.body).toContain('Alpha')
+      expect(ctx.llmWiki.page('index').sections[0]?.body).toContain('Beta')
+      expect(() => ctx.llmWiki.start({ documentId: documentB.id })).toThrow('该文章对应的词条已是最新')
+      const forced = ctx.llmWiki.start({ documentId: documentB.id, force: true })
+      await vi.waitFor(() => expect(ctx.llmWiki.generation(forced.id).state).toBe('completed'))
+      expect(ctx.llmWiki.page(betaBefore.id).title).toBe('Beta')
     } finally {
       await ctx.fiber.dispose()
       rmSync(dataDir, { recursive: true, force: true })

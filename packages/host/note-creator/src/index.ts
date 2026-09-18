@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { Context, Service } from '@deepseek-ai/cordis'
 import type { CreateKnowledgeNoteInput, KnowledgeDocument } from '@tiggyknowledge/contracts'
+import { contributeSurface, httpFromRange, pathSegment } from '@tiggyknowledge/plugin-surface'
 import type {} from '@tiggyknowledge/ingestion-tags'
 
 declare module '@deepseek-ai/cordis' {
@@ -30,6 +31,27 @@ export class KnowledgeNoteCreator extends Service {
 
   constructor(ctx: Context) {
     super(ctx, 'knowledgeNoteCreator')
+    contributeSurface(ctx, {
+      clients: [{
+        id: 'client-note-create',
+        moduleName: '@tiggyknowledge/client-note-create',
+        label: 'Note Creator',
+        description: 'Markdown knowledge note creation',
+      }],
+      routes: [{
+        id: 'notes:create',
+        methods: ['POST'],
+        path: /^\/api\/libraries\/([^/]+)\/notes$/,
+        handler: async ({ assertSameOrigin, json, match, readJson }) => {
+          assertSameOrigin()
+          try {
+            json(await this.create(pathSegment(match), await readJson<CreateKnowledgeNoteInput>()), 201)
+          } catch (error) {
+            throw httpFromRange(error, 'invalid_note')
+          }
+        },
+      }],
+    })
   }
 
   async create(libraryId: string, input: CreateKnowledgeNoteInput): Promise<KnowledgeDocument> {

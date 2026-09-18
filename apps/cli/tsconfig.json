@@ -26,6 +26,9 @@
     { "path": "../../packages/host/semantic-capabilities" },
     { "path": "../../packages/host/client-bootstrap" },
     { "path": "../../packages/host/plugin-inventory" },
+    { "path": "../../packages/host/plugin-surface" },
+    { "path": "../../packages/host/external-plugins" },
+    { "path": "../../packages/host/agent-api" },
     { "path": "../../packages/host/webserver" }
   ]
 }

@@ -1,0 +1,19 @@
+{
+  "name": "@example/tiggyknowledge-duplicates",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "./dist/host.js",
+  "exports": {
+    ".": "./dist/host.js",
+    "./client": "./dist/client.js"
+  },
+  "tiggyknowledgePlugin": {
+    "id": "example-duplicates",
+    "host": "./dist/host.js",
+    "client": {
+      "moduleName": "@example/tiggyknowledge-duplicates/client",
+      "entry": "./dist/client.js"
+    }
+  }
+}

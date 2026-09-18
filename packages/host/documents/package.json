@@ -5,13 +5,21 @@
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/types/index.d.ts",
-  "exports": { ".": { "types": "./lib/types/index.d.ts", "default": "./lib/index.js" } },
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    }
+  },
   "peerDependencies": {
     "@deepseek-ai/cordis": "workspace:^",
     "@tiggyknowledge/catalog-sqlite": "workspace:^",
     "@tiggyknowledge/chunker-basic": "workspace:^",
     "@tiggyknowledge/content-local": "workspace:^",
-    "@tiggyknowledge/index-fts": "workspace:^"
+    "@tiggyknowledge/document-metadata": "workspace:^",
+    "@tiggyknowledge/index-fts": "workspace:^",
+    "@tiggyknowledge/producer-url": "workspace:^",
+    "@tiggyknowledge/plugin-surface": "workspace:^"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "workspace:^",
@@ -19,6 +27,9 @@
     "@tiggyknowledge/chunker-basic": "workspace:^",
     "@tiggyknowledge/content-local": "workspace:^",
     "@tiggyknowledge/contracts": "workspace:^",
-    "@tiggyknowledge/index-fts": "workspace:^"
+    "@tiggyknowledge/document-metadata": "workspace:^",
+    "@tiggyknowledge/index-fts": "workspace:^",
+    "@tiggyknowledge/producer-url": "workspace:^",
+    "@tiggyknowledge/plugin-surface": "workspace:^"
   }
 }

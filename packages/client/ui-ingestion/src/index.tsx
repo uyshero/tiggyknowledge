@@ -7,7 +7,7 @@ import type { IngestionBatchResult, KnowledgeLibrary } from '@tiggyknowledge/con
 
 export const inject = ['clientApp', 'connection']
 
-const ACCEPTED_EXTENSIONS = ['.txt', '.md', '.markdown', '.pdf']
+const ACCEPTED_EXTENSIONS = ['.txt', '.md', '.markdown', '.pdf', '.url', '.webloc']
 const MAX_FILE_SIZE = 25 * 1024 * 1024
 
 function formatBytes(size: number): string {
@@ -110,14 +110,14 @@ export function apply(ctx: Context): void {
             <button className="primary-button" type="button" disabled={uploading || files.length === 0 || libraryId.length === 0} onClick={() => void uploadFiles()}><Upload size={16} />{uploading ? '处理中...' : `导入 ${files.length || ''}`}</button>
           </div>
         </header>
-        <input ref={inputRef} hidden disabled={libraries.length === 0} type="file" multiple accept=".txt,.md,.markdown,.pdf,text/plain,text/markdown,application/pdf" onChange={onFileChange} />
+        <input ref={inputRef} hidden disabled={libraries.length === 0} type="file" multiple accept=".txt,.md,.markdown,.pdf,.url,.webloc,text/plain,text/markdown,application/pdf" onChange={onFileChange} />
         <div className="ingestion-workspace">
           <section className="ingestion-toolbar" aria-label="导入目标">
             <div className="ingestion-toolbar-fields">
               <label><span>目标知识库</span><select disabled={loading || uploading || libraries.length === 0} value={libraryId} onChange={event => setLibraryId(event.target.value)}>{libraries.map(library => <option key={library.id} value={library.id}>{library.name}</option>)}</select></label>
               <label className="ingestion-tag-field"><span>批量标签</span><input disabled={uploading} maxLength={340} value={tagInput} onChange={event => setTagInput(event.target.value)} placeholder="产品，规范" /></label>
             </div>
-            <div className="ingestion-toolbar-info"><strong>支持 TXT、Markdown、文本型 PDF</strong><span>单文件不超过 25 MB，每批最多 50 个</span></div>
+            <div className="ingestion-toolbar-info"><strong>支持 TXT、Markdown、文本型 PDF、网址快捷方式</strong><span>单文件不超过 25 MB，每批最多 50 个</span></div>
           </section>
           {libraries.length === 0 && !loading ? (
             <div className="workspace-state"><span>请先创建一个知识库，再导入文件。</span><button className="secondary-button" type="button" onClick={() => ctx.clientApp.selectPage('knowledge')}>返回知识库</button></div>

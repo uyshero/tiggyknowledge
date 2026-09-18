@@ -13,11 +13,13 @@
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "workspace:^",
-    "@tiggyknowledge/wiki-sqlite": "workspace:^"
+    "@tiggyknowledge/wiki-sqlite": "workspace:^",
+    "@tiggyknowledge/plugin-surface": "workspace:^"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "workspace:^",
     "@tiggyknowledge/contracts": "workspace:^",
-    "@tiggyknowledge/wiki-sqlite": "workspace:^"
+    "@tiggyknowledge/wiki-sqlite": "workspace:^",
+    "@tiggyknowledge/plugin-surface": "workspace:^"
   }
 }

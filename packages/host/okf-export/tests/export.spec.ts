@@ -73,4 +73,16 @@ describe('OKF bundle export', () => {
       rmSync(dataDir, { recursive: true, force: true })
     }
   })
+
+  it('starts without knowledgeOkf so the host tree can disable OKF', async () => {
+    const ctx = new Context()
+    try {
+      ctx.provide('knowledgeCatalog', {})
+      ctx.provide('knowledgeContent', {})
+      await ctx.plugin(KnowledgeOkfExport)
+      expect(ctx.knowledgeOkfExport).toBeDefined()
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  })
 })

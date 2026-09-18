@@ -20,6 +20,8 @@ import type {} from '@tiggyknowledge/llm-client'
 import type {} from '@tiggyknowledge/llm-credentials'
 import type {} from '@tiggyknowledge/query'
 import type {} from '@tiggyknowledge/settings-file'
+import { contributeSurface } from '@tiggyknowledge/plugin-surface'
+import { libraryChatHttpRoutes } from './http.ts'
 import {
   isSafeDirectChat,
   LibraryChatRouteClarification,
@@ -44,6 +46,7 @@ export {
   type RouteLibraryChatInput,
   type RoutedLibraryChatMessage,
 } from './router.js'
+export { libraryChatHttpRoutes, type LibraryChatHttpHost } from './http.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -95,6 +98,15 @@ export class LibraryChat extends Service {
 
   constructor(ctx: Context) {
     super(ctx, 'libraryChat')
+    contributeSurface(ctx, {
+      clients: [{
+        id: 'client-library-chat',
+        moduleName: '@tiggyknowledge/client-library-chat',
+        label: 'Library Chat',
+        description: 'Knowledge library grounded question answering',
+      }],
+      routes: libraryChatHttpRoutes(this),
+    })
   }
 
   async *[Service.init](): AsyncGenerator<() => void> {
@@ -105,9 +117,13 @@ export class LibraryChat extends Service {
     const disposeDocuments = this.ctx.on('knowledge/document/deleted', documentIds => {
       for (const documentId of documentIds) this.ctx.chatStorage.deleteDocumentSummaries(documentId)
     })
+    const disposeChanged = this.ctx.on('knowledge/document/changed', documentIds => {
+      for (const documentId of documentIds) this.ctx.chatStorage.deleteDocumentSummaries(documentId)
+    })
     yield () => {
       disposeDeleted()
       disposeDocuments()
+      disposeChanged()
       for (const generation of this.active.values()) generation.controller.abort()
       this.active.clear()
     }

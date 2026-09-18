@@ -1,11 +1,17 @@
 import { Context, FiberState, Service } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/cordis-plugin-loader'
 import type { ComponentType, ElementType } from 'react'
-import type { KnowledgeDocument, KnowledgeDocumentMetadata, KnowledgeDocumentPreview, KnowledgeDocumentSourceType, KnowledgeLibrary, PluginInventoryEntry, PluginPhase, SystemSnapshot } from '@tiggyknowledge/contracts'
+import type { ClientPluginDescriptor, KnowledgeDocument, KnowledgeDocumentMetadata, KnowledgeDocumentPreview, KnowledgeDocumentSourceType, KnowledgeLibrary, PluginInventoryEntry, PluginPhase, SystemSnapshot } from '@tiggyknowledge/contracts'
+import { clientPluginOrigin, pluginDisableable } from '@tiggyknowledge/contracts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
     clientApp: ClientAppService
+  }
+
+  interface Events {
+    'client/url-create/open'(libraryId?: string): void
+    'client/document/updated'(document: KnowledgeDocument): void
   }
 }
 
@@ -15,7 +21,7 @@ export interface PageDefinition {
   icon: ElementType
   component: ComponentType
   order: number
-  section: 'primary' | 'secondary' | 'hidden'
+  section: 'primary' | 'secondary' | 'tags' | 'hidden'
 }
 
 export interface DocumentPreviewRendererProps {
@@ -106,6 +112,7 @@ export class ClientAppService extends Service {
   private readonly appOverlayDefinitions = new Map<string, AppOverlayDefinition>()
   private readonly listeners = new Set<() => void>()
   private snapshotValue: ClientAppSnapshot = { pages: [], appOverlays: [], documentInspectors: [], libraryActions: [], settingsPanels: [], selectedPageId: undefined, pageState: undefined, revision: 0 }
+  private loadClientModule: ((plugin: ClientPluginDescriptor) => Promise<unknown>) | undefined
 
   constructor(ctx: Context) {
     super(ctx, 'clientApp')
@@ -194,16 +201,39 @@ export class ClientAppService extends Service {
     return () => this.listeners.delete(listener)
   }
 
+  setClientModuleLoader(load: (plugin: ClientPluginDescriptor) => Promise<unknown>): void {
+    this.loadClientModule = load
+  }
+
+  async syncPlugins(plugins: readonly ClientPluginDescriptor[]): Promise<void> {
+    const load = this.loadClientModule
+    if (load === undefined) throw new Error('client-runtime: client module loader is not configured')
+    const entries = await Promise.all(plugins.map(async plugin => {
+      if (this.ctx.loader.builtins[plugin.moduleName] === undefined) {
+        this.ctx.loader.builtins[plugin.moduleName] = await load(plugin)
+      }
+      return { id: plugin.id, name: `cordis:${plugin.moduleName}` }
+    }))
+    await this.ctx.loader.root.update(entries)
+    await this.ctx.loader.await()
+  }
+
   clientPlugins(): PluginInventoryEntry[] {
     return [...this.ctx.loader.entries()]
       .filter(entry => !entry.options.group)
-      .map(entry => ({
-        entryId: entry.id,
-        moduleName: entry.options.name.replace(/^cordis:/, ''),
-        face: 'client',
-        enabled: !entry.disabled,
-        phase: entry.disabled ? 'disabled' : entry.fiber === undefined ? 'failed' : PHASES[entry.fiber.state],
-      }))
+      .map(entry => {
+        const moduleName = entry.options.name.replace(/^cordis:/, '')
+        const origin = clientPluginOrigin(moduleName)
+        return {
+          entryId: entry.id,
+          moduleName,
+          face: 'client' as const,
+          origin,
+          disableable: pluginDisableable(origin),
+          enabled: !entry.disabled,
+          phase: entry.disabled ? 'disabled' : entry.fiber === undefined ? 'failed' : PHASES[entry.fiber.state],
+        }
+      })
   }
 
   private publish(selectedPageId: string | undefined = this.snapshotValue.selectedPageId, pageState: unknown = this.snapshotValue.pageState): void {

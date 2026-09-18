@@ -4,12 +4,27 @@
     "rootDir": "src",
     "outDir": "lib/types"
   },
-  "include": ["src"],
+  "include": [
+    "src"
+  ],
   "references": [
-    { "path": "../../../vendor/cordis" },
-    { "path": "../../core/contracts" },
-    { "path": "../../storage/catalog-sqlite" },
-    { "path": "../document-metadata" },
-    { "path": "../preview-text" }
+    {
+      "path": "../../../vendor/cordis"
+    },
+    {
+      "path": "../../core/contracts"
+    },
+    {
+      "path": "../../storage/catalog-sqlite"
+    },
+    {
+      "path": "../document-metadata"
+    },
+    {
+      "path": "../preview-text"
+    },
+    {
+      "path": "../plugin-surface"
+    }
   ]
 }
