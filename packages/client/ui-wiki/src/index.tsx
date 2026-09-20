@@ -262,6 +262,7 @@ export function apply(ctx: Context): void {
     const [historyLoading, setHistoryLoading] = useState(false)
     const [revertingVersion, setRevertingVersion] = useState<number>()
     const [treeQuery, setTreeQuery] = useState('')
+    const [openQueue, setOpenQueue] = useState<'inbox' | 'reviews' | 'skipped'>()
 
     const loadWorkspace = useCallback(async (signal?: AbortSignal): Promise<void> => {
       const nextStatus = await ctx.connection.wikiStatus(signal)
@@ -539,10 +540,18 @@ export function apply(ctx: Context): void {
     const inbox = status?.inbox ?? []
     const reviews = status?.reviews ?? []
     const skipped = status?.skipped ?? []
+    useEffect(() => {
+      if (openQueue === 'inbox' && inbox.length === 0) setOpenQueue(undefined)
+      if (openQueue === 'reviews' && reviews.length === 0) setOpenQueue(undefined)
+      if (openQueue === 'skipped' && skipped.length === 0) setOpenQueue(undefined)
+    }, [inbox.length, openQueue, reviews.length, skipped.length])
     const queued = new Set(status?.queuedDocumentIds ?? [])
     const activeDocumentId = generation?.plan?.documentId
     const failed = generation?.state === 'failed'
     const indexView = page?.pageType === 'index'
+    const toggleQueue = (queue: 'inbox' | 'reviews' | 'skipped'): void => {
+      setOpenQueue(current => current === queue ? undefined : queue)
+    }
 
     return (
       <div className="page wiki-page">
@@ -554,9 +563,15 @@ export function apply(ctx: Context): void {
           <section className="wiki-summary" aria-label="Wiki 摘要">
             <div><span>知识文档</span><strong>{status.changes.totalDocuments}</strong></div>
             <div><span>Wiki 词条</span><strong>{Math.max(0, status.pageCount - (pages.some(item => item.pageType === 'index') ? 1 : 0))}</strong></div>
-            <div><span>待确认文章</span><strong>{inbox.length}</strong></div>
-            <div><span>待核对词条</span><strong>{reviews.length}</strong></div>
-            <div><span>已跳过文章</span><strong>{skipped.length}</strong></div>
+            <button className={openQueue === 'inbox' ? 'active' : ''} type="button" disabled={inbox.length === 0} onClick={() => toggleQueue('inbox')}>
+              <span>待确认文章</span><strong>{inbox.length}</strong>
+            </button>
+            <button className={openQueue === 'reviews' ? 'active' : ''} type="button" disabled={reviews.length === 0} onClick={() => toggleQueue('reviews')}>
+              <span>待核对词条</span><strong>{reviews.length}</strong>
+            </button>
+            <button className={openQueue === 'skipped' ? 'active' : ''} type="button" disabled={skipped.length === 0} onClick={() => toggleQueue('skipped')}>
+              <span>已跳过文章</span><strong>{skipped.length}</strong>
+            </button>
           </section>
         )}
 
@@ -584,12 +599,14 @@ export function apply(ctx: Context): void {
             )}
           </div>
         )}
-        {inbox.length > 0 && (
-          <section className="wiki-inbox" aria-label="待确认文章">
+        <div className="wiki-body">
+        {openQueue === 'inbox' && inbox.length > 0 && (
+          <section className="wiki-queue" aria-label="待确认文章">
             <header>
-              <div><p className="eyebrow">按文章确认</p><h2>新文章会自动出现在这里</h2></div>
-              <span>确认后作为后台任务逐篇生成词条</span>
+              <div><p className="eyebrow">按文章确认</p><h2>待确认文章</h2></div>
+              <button className="secondary-button" type="button" onClick={() => setOpenQueue(undefined)}><X size={14} />关闭</button>
             </header>
+            <p className="wiki-queue-note">确认后作为后台任务逐篇生成词条，不影响阅读。</p>
             <div className="wiki-inbox-list">
               {inbox.map(item => {
                 const running = generating && activeDocumentId === item.documentId
@@ -614,12 +631,13 @@ export function apply(ctx: Context): void {
             </div>
           </section>
         )}
-        {reviews.length > 0 && (
-          <section className="wiki-inbox" aria-label="待核对词条">
+        {openQueue === 'reviews' && reviews.length > 0 && (
+          <section className="wiki-queue" aria-label="待核对词条">
             <header>
-              <div><p className="eyebrow">生成后核对</p><h2>新词条需要你确认，也可以先补充</h2></div>
-              <span>确认收录后才会出现在首页分类里</span>
+              <div><p className="eyebrow">生成后核对</p><h2>待核对词条</h2></div>
+              <button className="secondary-button" type="button" onClick={() => setOpenQueue(undefined)}><X size={14} />关闭</button>
             </header>
+            <p className="wiki-queue-note">确认收录后才会出现在首页分类里。</p>
             <div className="wiki-inbox-list">
               {reviews.map(item => (
                 <article key={item.id}>
@@ -628,19 +646,23 @@ export function apply(ctx: Context): void {
                     <span>{pageTypeLabel(item.pageType)} · 待核对</span>
                   </div>
                   <div className="wiki-inbox-actions">
-                    <button className="primary-button" type="button" onClick={() => setSelectedPageId(item.id)}>去核对</button>
+                    <button className="primary-button" type="button" onClick={() => {
+                      setSelectedPageId(item.id)
+                      setOpenQueue(undefined)
+                    }}>去核对</button>
                   </div>
                 </article>
               ))}
             </div>
           </section>
         )}
-        {skipped.length > 0 && (
-          <section className="wiki-inbox skipped" aria-label="已跳过文章">
+        {openQueue === 'skipped' && skipped.length > 0 && (
+          <section className="wiki-queue skipped" aria-label="已跳过文章">
             <header>
-              <div><p className="eyebrow">暂不收录记录</p><h2>之前跳过的文章还可以重新解析</h2></div>
-              <span>{skipped.length} 篇</span>
+              <div><p className="eyebrow">暂不收录记录</p><h2>已跳过文章</h2></div>
+              <button className="secondary-button" type="button" onClick={() => setOpenQueue(undefined)}><X size={14} />关闭</button>
             </header>
+            <p className="wiki-queue-note">可以重新解析，生成后仍需核对。</p>
             <div className="wiki-inbox-list">
               {skipped.map(item => {
                 const running = generating && activeDocumentId === item.documentId
@@ -674,7 +696,7 @@ export function apply(ctx: Context): void {
           <section className="wiki-empty">
             <div className="wiki-empty-icon"><Library size={23} /></div>
             <h2>{inbox.length > 0 ? '还没有词条' : skipped.length > 0 ? '这些文章被跳过了' : 'Wiki 还是空的'}</h2>
-            <p>{inbox.length > 0 ? '确认上方文章后，会在后台生成对应词条，不影响你继续阅读。' : skipped.length > 0 ? '可以从上方已跳过记录里重新解析，生成对应词条。' : '知识库出现新文章后，会自动列出待确认词条。'}</p>
+            <p>{inbox.length > 0 ? '点上方「待确认文章」后生成词条，不影响你继续阅读。' : skipped.length > 0 ? '点上方「已跳过文章」可以重新解析。' : '知识库出现新文章后，点上方数字即可处理。'}</p>
           </section>
         ) : (
           <main className="wiki-workbench">
@@ -817,6 +839,7 @@ export function apply(ctx: Context): void {
             </aside>
           </main>
         )}
+        </div>
 
         {historyOpen && page !== undefined && (
           <div className="wiki-dialog-backdrop">
