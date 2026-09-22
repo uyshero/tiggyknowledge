@@ -1,0 +1,6 @@
+.text-preview { color: #2f3531; font-size: 13px; line-height: 1.7; }
+.text-preview-plain { margin: 0; white-space: pre-wrap; font: inherit; }
+.text-preview img, .text-preview .note-image img { display: block; max-width: 100%; height: auto; border-radius: 6px; border: 1px solid #e4e7e5; }
+.text-preview h1, .text-preview h2, .text-preview h3 { margin: 0 0 10px; }
+.text-preview p, .text-preview ul, .text-preview ol, .text-preview pre { margin: 0 0 12px; }
+.text-preview pre { overflow: auto; padding: 10px 12px; border-radius: 6px; background: #f1f3f2; font-size: 12px; }

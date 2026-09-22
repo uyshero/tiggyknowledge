@@ -29,9 +29,9 @@ describe('catalog-sqlite libraries', () => {
       await new Promise(resolve => setTimeout(resolve, 2))
       const second = catalog.createLibrary({ name: '产品知识' })
 
-      expect(first).toMatchObject({ name: '研发资料', description: '项目规范', documentCount: 0 })
+      expect(first).toMatchObject({ name: '研发资料', description: '项目规范', kind: 'knowledge', documentCount: 0 })
       expect(catalog.listLibraries().map(item => item.id)).toEqual([second.id, first.id])
-      expect(catalog.summary()).toMatchObject({ schemaVersion: 4, libraries: 2, documents: 0 })
+      expect(catalog.summary()).toMatchObject({ schemaVersion: 5, libraries: 2, documents: 0 })
     })
   })
 
@@ -106,8 +106,8 @@ describe('catalog-sqlite libraries', () => {
     try {
       const fiber = await ctx.plugin(CatalogSqlite, { dataDir })
       try {
-        expect(ctx.knowledgeCatalog.summary().schemaVersion).toBe(4)
-        expect(ctx.knowledgeCatalog.listLibraries()).toMatchObject([{ id: 'legacy', name: '旧知识库', description: '' }])
+        expect(ctx.knowledgeCatalog.summary().schemaVersion).toBe(5)
+        expect(ctx.knowledgeCatalog.listLibraries()).toMatchObject([{ id: 'legacy', name: '旧知识库', description: '', kind: 'knowledge' }])
       } finally {
         await fiber.dispose()
       }
@@ -115,5 +115,35 @@ describe('catalog-sqlite libraries', () => {
       await ctx.fiber.dispose()
       rmSync(dataDir, { recursive: true, force: true })
     }
+  })
+
+  it('hides the studio workspace from knowledge libraries and supports transfer', async () => {
+    await withCatalog(catalog => {
+      const knowledge = catalog.createLibrary({ name: '产品知识' })
+      const studio = catalog.ensureStudioLibrary()
+      expect(studio.kind).toBe('studio')
+      expect(catalog.listLibraries().map(item => item.id)).toEqual([knowledge.id])
+      expect(catalog.getLibrary(studio.id)).toMatchObject({ id: studio.id, kind: 'studio' })
+      expect(() => catalog.deleteLibrary(studio.id)).toThrow('创作空间不能删除')
+      expect(() => catalog.updateLibrary(studio.id, { name: '改名', description: '' })).toThrow('创作空间不能修改')
+
+      const draft = catalog.createDocument({
+        libraryId: studio.id,
+        title: '草稿笔记',
+        originalName: 'draft.md',
+        sourceType: 'markdown',
+        sourceAssetId: 'asset-studio',
+        contentHash: 'hash-studio',
+        sizeBytes: 12,
+      })
+      expect(catalog.summary()).toMatchObject({ libraries: 1, documents: 0 })
+      expect(catalog.listDocuments(studio.id).map(item => item.id)).toEqual([draft.id])
+
+      const moved = catalog.moveDocument(draft.id, knowledge.id)
+      expect(moved).toMatchObject({ id: draft.id, libraryId: knowledge.id, indexStatus: 'pending' })
+      expect(catalog.listDocuments(studio.id)).toEqual([])
+      expect(catalog.listDocuments(knowledge.id).map(item => item.id)).toEqual([draft.id])
+      expect(catalog.summary()).toMatchObject({ libraries: 1, documents: 1 })
+    })
   })
 })

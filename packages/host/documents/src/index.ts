@@ -65,7 +65,9 @@ export class KnowledgeDocuments extends Service {
                 ? 'application/pdf'
                 : source.document.sourceType === 'markdown'
                   ? 'text/markdown; charset=utf-8'
-                  : 'text/plain; charset=utf-8'
+                  : source.document.sourceType === 'audio'
+                    ? (source.document.audioMimeType ?? 'audio/webm')
+                    : 'text/plain; charset=utf-8'
               response.writeHead(200, {
                 'cache-control': 'private, no-store',
                 'content-disposition': `inline; filename*=UTF-8''${encodeURIComponent(source.document.originalName)}`,
@@ -76,6 +78,26 @@ export class KnowledgeDocuments extends Service {
               response.end(Buffer.from(source.bytes))
             } catch (error) {
               throw httpFromRange(error, 'document_not_found')
+            }
+          },
+        },
+        {
+          id: 'documents:image',
+          methods: ['GET'],
+          path: /^\/api\/documents\/([^/]+)\/images\/([^/]+)$/,
+          handler: ({ response, match }) => {
+            try {
+              const source = this.image(pathSegment(match, 1), pathSegment(match, 2))
+              response.writeHead(200, {
+                'cache-control': 'private, max-age=31536000, immutable',
+                'content-disposition': `inline; filename*=UTF-8''${encodeURIComponent(source.name)}`,
+                'content-length': source.bytes.byteLength,
+                'content-type': source.mimeType,
+                'x-content-type-options': 'nosniff',
+              })
+              response.end(Buffer.from(source.bytes))
+            } catch (error) {
+              throw httpFromRange(error, 'document_image_not_found')
             }
           },
         },
@@ -173,10 +195,22 @@ export class KnowledgeDocuments extends Service {
     return { document, bytes: this.ctx.knowledgeContent.read(document.sourceAssetId) }
   }
 
+  image(documentId: string, imageId: string): { name: string, mimeType: string, bytes: Uint8Array } {
+    const document = this.ctx.knowledgeCatalog.getDocuments([documentId])[0]
+    if (document === undefined) throw new RangeError('知识条目不存在')
+    const image = document.images?.find(item => item.id === imageId)
+    if (image === undefined) throw new RangeError('笔记图片不存在')
+    return {
+      name: `${image.name}${extensionForImage(image.mimeType)}`,
+      mimeType: image.mimeType,
+      bytes: this.ctx.knowledgeContent.read(image.id),
+    }
+  }
+
   updateTitle(documentId: string, input: UpdateKnowledgeDocumentTitleInput): KnowledgeDocument {
     const title = validateTitle(input.title)
     const document = this.ctx.knowledgeCatalog.updateDocument(documentId, { title })
-    this.ctx.knowledgeIndex.updateTitle(document.id, document.title)
+    if (isKnowledgeLibrary(this.ctx, document.libraryId)) this.ctx.knowledgeIndex.updateTitle(document.id, document.title)
     this.ctx.emit('knowledge/graph/invalidate')
     this.ctx.emit('knowledge/document/changed', [document.id])
     return document
@@ -224,13 +258,15 @@ export class KnowledgeDocuments extends Service {
       indexStatus: 'pending',
     })
     if (input.tagNames !== undefined) this.ctx.knowledgeMetadata.setTags(updated.id, input.tagNames)
-    const chunks = this.ctx.knowledgeChunker.chunk({ body: markdown, sourceType: 'markdown' })
-    try {
-      this.ctx.knowledgeIndex.index({ id: updated.id, libraryId: updated.libraryId, title: updated.title }, chunks)
-      updated = this.ctx.knowledgeCatalog.setDocumentIndexStatus(updated.id, 'ready')
-    } catch (error) {
-      updated = this.ctx.knowledgeCatalog.setDocumentIndexStatus(updated.id, 'failed')
-      throw error
+    if (isKnowledgeLibrary(this.ctx, updated.libraryId)) {
+      const chunks = this.ctx.knowledgeChunker.chunk({ body: markdown, sourceType: 'markdown' })
+      try {
+        this.ctx.knowledgeIndex.index({ id: updated.id, libraryId: updated.libraryId, title: updated.title }, chunks)
+        updated = this.ctx.knowledgeCatalog.setDocumentIndexStatus(updated.id, 'ready')
+      } catch (error) {
+        updated = this.ctx.knowledgeCatalog.setDocumentIndexStatus(updated.id, 'failed')
+        throw error
+      }
     }
     this.ctx.emit('knowledge/graph/invalidate')
     this.ctx.emit('knowledge/document/changed', [updated.id])
@@ -269,7 +305,9 @@ export class KnowledgeDocuments extends Service {
   }
 
   deleteLibrary(libraryId: string): DeleteKnowledgeLibraryResult {
-    if (this.ctx.knowledgeCatalog.getLibrary(libraryId) === undefined) throw new RangeError('知识库不存在')
+    const library = this.ctx.knowledgeCatalog.getLibrary(libraryId)
+    if (library === undefined) throw new RangeError('知识库不存在')
+    if (library.kind === 'studio') throw new RangeError('创作空间不能删除')
     const deleted = this.ctx.knowledgeCatalog.deleteLibrary(libraryId)
     const deletedDocumentIds = deleted.map(document => document.id)
     try {
@@ -295,6 +333,10 @@ export class KnowledgeDocuments extends Service {
     this.ctx.emit('knowledge/document/deleted', deletedIds)
     return { deletedIds }
   }
+}
+
+function isKnowledgeLibrary(ctx: Context, libraryId: string): boolean {
+  return ctx.knowledgeCatalog.getLibrary(libraryId)?.kind === 'knowledge'
 }
 
 function parseMarkdownNote(content: string): { title: string, body: string } {
@@ -325,6 +367,13 @@ function validateBody(body: string): string {
   const value = body.trim()
   if (value.length === 0 || value.length > 200_000) throw new RangeError('正文长度应为 1 到 200,000 个字符')
   return value
+}
+
+function extensionForImage(mimeType: string): string {
+  if (mimeType === 'image/jpeg') return '.jpg'
+  if (mimeType === 'image/gif') return '.gif'
+  if (mimeType === 'image/webp') return '.webp'
+  return '.png'
 }
 
 export default KnowledgeDocuments

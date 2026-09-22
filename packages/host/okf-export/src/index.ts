@@ -36,6 +36,7 @@ function referenceExtension(sourceType: KnowledgeDocumentSourceType): string {
   if (sourceType === 'pdf') return '.pdf'
   if (sourceType === 'markdown') return '.markdown.txt'
   if (sourceType === 'url') return '.url.txt'
+  if (sourceType === 'audio') return '.audio'
   return '.txt'
 }
 

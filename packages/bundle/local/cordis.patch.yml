@@ -51,6 +51,9 @@
     - id: url-preview
       name: '@tiggyknowledge/preview-url'
 
+    - id: audio-preview
+      name: '@tiggyknowledge/preview-audio'
+
     - id: knowledge-documents
       name: '@tiggyknowledge/documents'
 
@@ -102,6 +105,9 @@
 
     - id: llm-client
       name: '@tiggyknowledge/llm-client'
+
+    - id: studio
+      name: '@tiggyknowledge/studio'
 
     - id: llm-wiki
       name: '@tiggyknowledge/llm-wiki'

@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   isLlmReady,
+  isTranscriptionReady,
   resolvePreferredLlmModel,
+  resolveTranscriptionLlmModel,
   resolveWikiLlmModel,
   type LibraryChatStreamEvent,
   type LibraryChatTask,
@@ -45,11 +47,20 @@ describe('LLM model resolution', () => {
       model: 'qwen-plus',
     })
     expect(isLlmReady(settings)).toBe(true)
+    expect(resolveTranscriptionLlmModel(settings)).toBeUndefined()
+    expect(isTranscriptionReady(settings)).toBe(false)
+    expect(isTranscriptionReady({ ...settings, transcriptionModelId: 'plus' })).toBe(true)
+    expect(resolveTranscriptionLlmModel({ ...settings, transcriptionModelId: 'plus' })).toMatchObject({
+      providerId: 'qwen',
+      modelId: 'plus',
+      model: 'qwen-plus',
+    })
   })
 
   it('falls back to the first configured model when preferred is missing', () => {
     expect(resolvePreferredLlmModel({ providers: settings.providers })?.modelId).toBe('mini')
     expect(isLlmReady({ providers: [] })).toBe(false)
+    expect(isTranscriptionReady({ providers: [] })).toBe(false)
   })
 })
 

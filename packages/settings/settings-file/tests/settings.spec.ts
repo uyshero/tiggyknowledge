@@ -75,6 +75,7 @@ describe('LLM integration settings', () => {
       const settings = ctx.settings.llmIntegration(id => ({ configured: id === 'openai-main' }))
       expect(settings.preferredModelId).toBe('gpt-mini')
       expect(settings.wikiModelId).toBeUndefined()
+      expect(settings.transcriptionModelId).toBeUndefined()
       expect(settings.providers).toHaveLength(2)
       expect(settings.providers[1]?.models[0]).toMatchObject({ id: 'qwen-plus', name: 'qwen-plus', model: 'qwen-plus' })
 
@@ -82,6 +83,12 @@ describe('LLM integration settings', () => {
       expect(ctx.settings.llmIntegration().wikiModelId).toBe('qwen-plus')
       ctx.settings.updateLlmIntegration({ wikiModelId: 'gpt-mini' })
       expect(ctx.settings.llmIntegration().wikiModelId).toBeUndefined()
+      ctx.settings.updateLlmIntegration({ transcriptionModelId: 'qwen-plus' })
+      expect(ctx.settings.llmIntegration().transcriptionModelId).toBe('qwen-plus')
+      ctx.settings.updateLlmIntegration({ transcriptionModelId: 'gpt-mini' })
+      expect(ctx.settings.llmIntegration().transcriptionModelId).toBe('gpt-mini')
+      ctx.settings.updateLlmIntegration({ transcriptionModelId: null })
+      expect(ctx.settings.llmIntegration().transcriptionModelId).toBeUndefined()
     } finally {
       await ctx.fiber.dispose()
     }

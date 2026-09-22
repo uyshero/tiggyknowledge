@@ -54,11 +54,12 @@ export class KnowledgeQueryService extends Service {
       : []
     const favoriteOnly = input.favoriteOnly === true
     const hits = this.ctx.knowledgeIndex.search({ text, libraryIds, limit: favoriteOnly ? 50 : topK })
+    const knowledgeLibraryIds = new Set(this.ctx.knowledgeCatalog.listLibraries().map(library => library.id))
     const documents = new Map(this.ctx.knowledgeCatalog.getDocuments(hits.map(hit => hit.documentId)).map(document => [document.id, document]))
     const metadata = this.ctx.knowledgeMetadata.getMany(hits.map(hit => hit.documentId))
     const results = hits.flatMap(hit => {
       const document = documents.get(hit.documentId)
-      if (document === undefined) return []
+      if (document === undefined || !knowledgeLibraryIds.has(document.libraryId)) return []
       const documentMetadata = metadata.get(hit.documentId) ?? { documentId: hit.documentId, tags: [], isFavorite: false }
       if (favoriteOnly && !documentMetadata.isFavorite) return []
       return [{

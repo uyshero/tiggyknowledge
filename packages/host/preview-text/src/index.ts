@@ -37,6 +37,12 @@ export class TextPreview extends Service {
     }
     this.register(['text', 'markdown'], handler)
     contributeSurface(ctx, {
+      clients: [{
+        id: 'client-preview-text',
+        moduleName: '@tiggyknowledge/client-preview-text',
+        label: 'Text Preview',
+        description: 'Markdown and plain-text document preview',
+      }],
       routes: [{
         id: 'preview:document',
         methods: ['GET'],

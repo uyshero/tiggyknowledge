@@ -171,11 +171,16 @@ button:focus-visible { outline: 2px solid #737a76; outline-offset: 2px; }
 .note-markdown h1, .note-markdown h2, .note-markdown h3 { margin: 0 0 10px; }
 .note-markdown p, .note-markdown ul, .note-markdown ol, .note-markdown pre { margin: 0 0 12px; }
 .note-markdown pre { overflow: auto; padding: 10px 12px; border-radius: 6px; background: #f1f3f2; font-size: 12px; }
+.note-markdown img, .note-image img { display: block; max-width: 100%; height: auto; border-radius: 6px; border: 1px solid #e4e7e5; }
 .note-history { min-width: 0; padding-top: 8px; }
 .note-history-current, .note-history article { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 10px; padding: 10px 11px; border: 1px solid #e4e7e5; border-radius: 7px; background: #fff; }
 .note-history-current strong, .note-history article strong { display: block; color: #2d322f; font-size: 12px; }
 .note-history span, .note-history p { color: #7d847f; font-size: 11px; }
 .note-history article button { flex: 0 0 auto; }
+
+.audio-preview { display: flex; flex-direction: column; gap: 16px; padding: 8px 4px; }
+.audio-preview audio { width: 100%; }
+.audio-preview-transcript pre { margin: 0; white-space: pre-wrap; color: #2f3531; font: inherit; font-size: 13px; line-height: 1.7; }
 
 .search-workspace { padding: 22px 26px 60px; }
 .knowledge-search-bar { display: grid; grid-template-columns: minmax(240px, 1fr) 190px 128px auto auto; align-items: center; gap: 8px; padding-bottom: 20px; border-bottom: 1px solid #e8ebe9; }

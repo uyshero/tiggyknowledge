@@ -78,6 +78,7 @@ function readSettings(value: unknown): LlmIntegrationSettings {
   const settings: LlmIntegrationSettings = { providers }
   if (typeof source.preferredModelId === 'string') settings.preferredModelId = source.preferredModelId
   if (typeof source.wikiModelId === 'string') settings.wikiModelId = source.wikiModelId
+  if (typeof source.transcriptionModelId === 'string') settings.transcriptionModelId = source.transcriptionModelId
   return settings
 }
 
@@ -102,6 +103,7 @@ export function apply(ctx: Context): void {
     const [providers, setProviders] = useState<ProviderDraft[]>(() => snapshot.providers.map(toDraft))
     const [preferredModelId, setPreferredModelId] = useState(snapshot.preferredModelId ?? '')
     const [wikiModelId, setWikiModelId] = useState(snapshot.wikiModelId ?? '')
+    const [transcriptionModelId, setTranscriptionModelId] = useState(snapshot.transcriptionModelId ?? '')
     const [editingProviderId, setEditingProviderId] = useState<string>()
     const [advancedProviderIds, setAdvancedProviderIds] = useState<string[]>([])
     const [saving, setSaving] = useState(false)
@@ -113,12 +115,14 @@ export function apply(ctx: Context): void {
       setProviders(snapshot.providers.map(toDraft))
       setPreferredModelId(snapshot.preferredModelId ?? '')
       setWikiModelId(snapshot.wikiModelId ?? '')
+      setTranscriptionModelId(snapshot.transcriptionModelId ?? '')
     }, [snapshot])
 
     const publishSettings = (settings: LlmIntegrationSettings): void => {
       setProviders(settings.providers.map(toDraft))
       setPreferredModelId(settings.preferredModelId ?? '')
       setWikiModelId(settings.wikiModelId ?? '')
+      setTranscriptionModelId(settings.transcriptionModelId ?? '')
       if (system !== undefined) onSystemChange?.(applyLlmSettingsSnapshot(system, settings))
     }
 
@@ -139,6 +143,7 @@ export function apply(ctx: Context): void {
         })),
         preferredModelId: preferredModelId.trim() === '' ? null : preferredModelId,
         wikiModelId: wikiModelId.trim() === '' || wikiModelId === preferredModelId ? null : wikiModelId,
+        transcriptionModelId: transcriptionModelId.trim() === '' ? null : transcriptionModelId,
       }
       let settings = await ctx.connection.updateLlmSettings(input)
       for (const provider of providers) {
@@ -364,7 +369,7 @@ export function apply(ctx: Context): void {
             <div className="llm-block-heading">
               <div>
                 <strong>任务模型</strong>
-                <span>配置好模型后，选择默认使用的首选模型；Wiki 生成默认使用首选模型。</span>
+                <span>配置好模型后，选择默认使用的首选模型；Wiki 生成可沿用首选模型。语音转写必须单独指定。</span>
               </div>
             </div>
             <div className="llm-grid">
@@ -386,6 +391,16 @@ export function apply(ctx: Context): void {
                   ))}
                 </select>
                 <small>未单独指定时，Wiki 生成会使用首选模型。</small>
+              </label>
+              <label className="llm-field">
+                <span>语音转写</span>
+                <select value={transcriptionModelId} disabled={choices.length === 0} onChange={event => setTranscriptionModelId(event.target.value)}>
+                  <option value="">未配置（录音无法自动转文字）</option>
+                  {choices.map(choice => (
+                    <option key={choice.id} value={choice.id}>{choice.label}{choice.apiKeyConfigured ? '' : '（未配置 Key）'}</option>
+                  ))}
+                </select>
+                <small>需单独指定支持语音转写的模型，不会沿用聊天或 Wiki 模型。</small>
               </label>
             </div>
           </section>

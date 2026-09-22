@@ -335,4 +335,30 @@ describe('OpenAI-compatible LLM client', () => {
       await ctx.fiber.dispose()
     }
   })
+
+  it('posts audio transcriptions with the configured speech model', async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ text: ' 会议纪要 ' }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+    const ctx = new Context()
+    ctx.provide('llmCredentials', { getApiKey: () => 'sk-test-key' })
+    try {
+      await ctx.plugin(OpenAiCompatibleClient)
+      await expect(ctx.llmClient.transcribe({
+        settings: { ...settings, model: 'whisper-1' },
+        bytes: Buffer.from('fake-audio'),
+        filename: 'meeting.webm',
+        mimeType: 'audio/webm',
+      })).resolves.toEqual({ text: '会议纪要' })
+      expect(fetchMock).toHaveBeenCalledOnce()
+      const [url, request] = fetchMock.mock.calls[0] ?? []
+      expect(url).toBe('https://llm.example.test/v1/audio/transcriptions')
+      expect(request?.headers).toMatchObject({ authorization: 'Bearer sk-test-key' })
+      expect(request?.body).toBeInstanceOf(FormData)
+      const form = request?.body as FormData
+      expect(form.get('model')).toBe('whisper-1')
+      expect(form.get('language')).toBe('zh')
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  })
 })

@@ -1,5 +1,5 @@
 import type { Context } from '@deepseek-ai/cordis'
-import { ArrowLeft, BadgeInfo, FilePenLine, FileText, Link2, Search, Star, Tag, Trash2, Upload, X } from 'lucide-react'
+import { ArrowLeft, BadgeInfo, FilePenLine, FileText, Link2, Mic, Search, Star, Tag, Trash2, Upload, X } from 'lucide-react'
 import { Fragment, useEffect, useMemo, useRef, useState, useSyncExternalStore, type JSX, type ReactNode } from 'react'
 import type {} from '@tiggyknowledge/client-connection'
 import type {} from '@tiggyknowledge/client-runtime'
@@ -65,6 +65,7 @@ function formatSourceType(sourceType: KnowledgeDocument['sourceType']): string {
   if (sourceType === 'markdown') return 'Markdown'
   if (sourceType === 'pdf') return 'PDF'
   if (sourceType === 'url') return '网页'
+  if (sourceType === 'audio') return '录音'
   return 'TXT'
 }
 
@@ -580,7 +581,7 @@ export function apply(ctx: Context): void {
           <label className="documents-library-select"><span>知识库</span><select value={libraryId} onChange={event => selectLibrary(event.target.value)}>{libraries.map(library => <option key={library.id} value={library.id}>{library.name}</option>)}</select></label>
           <div className="documents-view-controls">
             <label className="documents-query"><Search size={14} /><input aria-label="筛选条目名称" value={documentQuery} onChange={event => setDocumentQuery(event.target.value)} placeholder="筛选名称" /></label>
-            <label><span className="visually-hidden">文件类型</span><select aria-label="文件类型" value={typeFilter} onChange={event => setTypeFilter(event.target.value as DocumentTypeFilter)}><option value="all">全部类型</option><option value="pdf">PDF</option><option value="markdown">Markdown</option><option value="text">TXT</option><option value="url">网页</option></select></label>
+            <label><span className="visually-hidden">文件类型</span><select aria-label="文件类型" value={typeFilter} onChange={event => setTypeFilter(event.target.value as DocumentTypeFilter)}><option value="all">全部类型</option><option value="pdf">PDF</option><option value="markdown">Markdown</option><option value="text">TXT</option><option value="url">网页</option><option value="audio">录音</option></select></label>
             <label><span className="visually-hidden">条目排序</span><select aria-label="条目排序" value={sortBy} onChange={event => setSortBy(event.target.value as DocumentSort)}><option value="updated-desc">最近更新</option><option value="updated-asc">最早更新</option><option value="name-asc">名称升序</option><option value="name-desc">名称降序</option><option value="type-asc">按类型</option></select></label>
             <span>{visibleDocuments.length === documents.length ? `${documents.length} 个条目` : `${visibleDocuments.length} / ${documents.length} 个条目`}</span>
           </div>
@@ -606,7 +607,7 @@ export function apply(ctx: Context): void {
                   <div className={`document-row ${selectedDocumentId === document.id ? 'active' : ''}`} key={document.id}>
                     <input type="checkbox" aria-label={`选择 ${document.title}`} checked={selectedIds.has(document.id)} onChange={() => toggleDocument(document.id)} />
                     <button className="document-open" type="button" onClick={() => openDocument(document.id)}>
-                      {document.sourceType === 'url' ? <Link2 size={16} /> : <FileText size={16} />}
+                      {document.sourceType === 'url' ? <Link2 size={16} /> : document.sourceType === 'audio' ? <Mic size={16} /> : <FileText size={16} />}
                       <span><strong>{document.title}</strong><small>{document.originalName} · {formatBytes(document.sizeBytes)} · {DATE_FORMATTER.format(new Date(document.updatedAt))}</small></span>
                     </button>
                     <button className="document-delete" type="button" title="删除条目" onClick={() => requestDelete([document.id])}><Trash2 size={15} /></button>

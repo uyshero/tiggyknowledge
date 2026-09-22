@@ -66,6 +66,18 @@ export interface ChatCompletionResult {
   outputTokens: number
 }
 
+export interface TranscriptionInput {
+  settings: LlmResolvedEndpoint
+  bytes: Uint8Array
+  filename: string
+  mimeType: string
+  signal?: AbortSignal
+}
+
+export interface TranscriptionResult {
+  text: string
+}
+
 export interface ChatCompletionStreamInput extends Omit<ChatCompletionInput, 'json' | 'maxAttempts'> {
   tools?: ToolSchema[]
   toolChoice?: ToolChoice
@@ -86,6 +98,13 @@ interface CompletionResponse {
     prompt_tokens?: unknown
     completion_tokens?: unknown
   }
+  error?: {
+    message?: unknown
+  }
+}
+
+interface TranscriptionResponse {
+  text?: unknown
   error?: {
     message?: unknown
   }
@@ -343,6 +362,44 @@ export class OpenAiCompatibleClient extends Service {
       message: `连接成功，模型：${settings.model}`,
     }
   }
+
+  async transcribe(input: TranscriptionInput): Promise<TranscriptionResult> {
+    validateSettings(input.settings)
+    if (input.bytes.byteLength === 0) throw new RangeError('录音内容为空')
+    const timeoutSignal = AbortSignal.timeout(Math.max(input.settings.requestTimeoutMs, 60_000))
+    const signal = input.signal === undefined ? timeoutSignal : AbortSignal.any([input.signal, timeoutSignal])
+    const form = new FormData()
+    form.set('file', new File([Buffer.from(input.bytes)], input.filename, { type: input.mimeType }))
+    form.set('model', input.settings.model)
+    form.set('language', 'zh')
+    let response: Response
+    try {
+      response = await fetch(transcriptionUrl(input.settings.baseUrl), {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${this.ctx.llmCredentials.getApiKey(input.settings.providerId)}`,
+        },
+        body: form,
+        signal,
+      })
+    } catch (error) {
+      throw requestFailure(error, signal, input.signal, input.settings.requestTimeoutMs)
+    }
+    const raw = await response.text()
+    let payload: TranscriptionResponse
+    try {
+      payload = JSON.parse(raw) as TranscriptionResponse
+    } catch {
+      throw new Error(`语音转写服务返回了无效 JSON（HTTP ${response.status}）`)
+    }
+    if (!response.ok) {
+      const message = typeof payload.error?.message === 'string' ? payload.error.message : raw.slice(0, 500)
+      throw new Error(`语音转写失败（HTTP ${response.status}）：${message}`)
+    }
+    const text = typeof payload.text === 'string' ? payload.text.trim() : ''
+    if (text.length === 0) throw new Error('语音转写结果为空')
+    return { text }
+  }
 }
 
 interface PartialToolCall {
@@ -379,6 +436,13 @@ interface StreamResponse {
 function completionUrl(baseUrl: string): string {
   const normalized = baseUrl.trim().replace(/\/+$/, '')
   return normalized.endsWith('/chat/completions') ? normalized : `${normalized}/chat/completions`
+}
+
+function transcriptionUrl(baseUrl: string): string {
+  const normalized = baseUrl.trim().replace(/\/+$/, '')
+  if (normalized.endsWith('/chat/completions')) return `${normalized.slice(0, -'/chat/completions'.length)}/audio/transcriptions`
+  if (normalized.endsWith('/v1')) return `${normalized}/audio/transcriptions`
+  return `${normalized}/audio/transcriptions`
 }
 
 function validateSettings(settings: LlmResolvedEndpoint): void {

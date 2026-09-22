@@ -69,6 +69,7 @@ interface StoredLlmIntegration {
   providers: StoredLlmProvider[]
   preferredModelId?: string
   wikiModelId?: string
+  transcriptionModelId?: string
 }
 
 export type LlmCredentialLookup = (providerId: string) => { configured: boolean, preview?: string }
@@ -281,6 +282,7 @@ function attachLlmCredentials(stored: StoredLlmIntegration, lookup: LlmCredentia
   }
   if (stored.preferredModelId !== undefined) settings.preferredModelId = stored.preferredModelId
   if (stored.wikiModelId !== undefined) settings.wikiModelId = stored.wikiModelId
+  if (stored.transcriptionModelId !== undefined) settings.transcriptionModelId = stored.transcriptionModelId
   return settings
 }
 
@@ -293,15 +295,22 @@ function applyLlmIntegrationUpdate(current: StoredLlmIntegration, input: UpdateL
   const wikiModelId = input.wikiModelId === undefined
     ? current.wikiModelId
     : input.wikiModelId
+  const transcriptionModelId = input.transcriptionModelId === undefined
+    ? current.transcriptionModelId
+    : input.transcriptionModelId
   const resolvedPreferred = preferredModelId !== null && preferredModelId !== undefined && modelIds.has(preferredModelId)
     ? preferredModelId
     : providers[0]?.models[0]?.id
   const resolvedWiki = wikiModelId !== null && wikiModelId !== undefined && modelIds.has(wikiModelId)
     ? wikiModelId
     : undefined
+  const resolvedTranscription = transcriptionModelId !== null && transcriptionModelId !== undefined && modelIds.has(transcriptionModelId)
+    ? transcriptionModelId
+    : undefined
   const next: StoredLlmIntegration = { providers }
   if (resolvedPreferred !== undefined) next.preferredModelId = resolvedPreferred
   if (resolvedWiki !== undefined && resolvedWiki !== resolvedPreferred) next.wikiModelId = resolvedWiki
+  if (resolvedTranscription !== undefined) next.transcriptionModelId = resolvedTranscription
   return next
 }
 
@@ -312,6 +321,7 @@ function normalizeLlmIntegration(value: unknown): StoredLlmIntegration {
       providers: normalizeProviders(source.providers),
       ...(typeof source.preferredModelId === 'string' ? { preferredModelId: source.preferredModelId } : {}),
       ...(typeof source.wikiModelId === 'string' ? { wikiModelId: source.wikiModelId } : {}),
+      ...(typeof source.transcriptionModelId === 'string' ? { transcriptionModelId: source.transcriptionModelId } : {}),
     }, {})
   }
   return migrateLegacyLlmIntegration(source)

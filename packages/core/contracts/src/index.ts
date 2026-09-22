@@ -70,10 +70,13 @@ export interface OpenDataDirectoryResult {
   path: string
 }
 
+export type KnowledgeLibraryKind = 'knowledge' | 'studio'
+
 export interface KnowledgeLibrary {
   id: string
   name: string
   description: string
+  kind: KnowledgeLibraryKind
   documentCount: number
   createdAt: string
   updatedAt: string
@@ -98,7 +101,7 @@ export interface DeleteKnowledgeLibraryResult {
   deletedDocumentIds: string[]
 }
 
-export type KnowledgeDocumentSourceType = 'text' | 'markdown' | 'pdf' | 'url'
+export type KnowledgeDocumentSourceType = 'text' | 'markdown' | 'pdf' | 'url' | 'audio'
 export type KnowledgeDocumentIndexStatus = 'pending' | 'ready' | 'failed'
 
 export interface KnowledgeDocument {
@@ -111,8 +114,18 @@ export interface KnowledgeDocument {
   contentHash: string
   sizeBytes: number
   indexStatus: KnowledgeDocumentIndexStatus
+  transcript?: string
+  audioMimeType?: string
+  category?: string
+  images?: KnowledgeNoteImage[]
   createdAt: string
   updatedAt: string
+}
+
+export interface KnowledgeNoteImage {
+  id: string
+  mimeType: string
+  name: string
 }
 
 export interface KnowledgeDocumentList {
@@ -262,6 +275,63 @@ export interface CreateKnowledgeNoteInput {
   title: string
   body: string
   tagNames: string[]
+}
+
+export interface StudioWorkspace {
+  library: KnowledgeLibrary
+  items: KnowledgeDocument[]
+  categories: string[]
+  transcriptionReady: boolean
+}
+
+export interface CreateStudioCategoryInput {
+  name: string
+}
+
+export interface RenameStudioCategoryInput {
+  from: string
+  name: string
+}
+
+export interface DeleteStudioCategoryInput {
+  name: string
+}
+
+export interface CreateStudioNoteInput {
+  title: string
+  body: string
+  category?: string
+}
+
+export interface CreateStudioRecordingInput {
+  title: string
+  mimeType: string
+  audioBase64: string
+  transcript?: string
+  category?: string
+}
+
+export interface UpdateStudioRecordingInput {
+  title?: string
+  transcript?: string
+  category?: string
+}
+
+export interface TransferStudioDocumentInput {
+  libraryId: string
+}
+
+export interface AttachStudioNoteImageInput {
+  mimeType: string
+  imageBase64: string
+  name?: string
+}
+
+export interface StudioNoteImageAttachment {
+  document: KnowledgeDocument
+  image: KnowledgeNoteImage
+  url: string
+  markdown: string
 }
 
 export interface CreateKnowledgeUrlInput {
@@ -416,6 +486,7 @@ export interface LlmIntegrationSettings {
   providers: LlmProviderSettings[]
   preferredModelId?: string
   wikiModelId?: string
+  transcriptionModelId?: string
 }
 
 export interface LlmResolvedEndpoint {
@@ -461,6 +532,7 @@ export interface UpdateLlmIntegrationSettingsInput {
   providers?: UpdateLlmProviderInput[]
   preferredModelId?: string | null
   wikiModelId?: string | null
+  transcriptionModelId?: string | null
 }
 
 export interface SetLlmApiKeyInput {
@@ -530,6 +602,10 @@ export function resolveWikiLlmModel(settings: LlmIntegrationSettings): LlmResolv
   return resolveLlmModel(settings, settings.wikiModelId) ?? resolvePreferredLlmModel(settings)
 }
 
+export function resolveTranscriptionLlmModel(settings: LlmIntegrationSettings): LlmResolvedEndpoint | undefined {
+  return resolveLlmModel(settings, settings.transcriptionModelId)
+}
+
 export function resolveLlmProviderModel(
   settings: LlmIntegrationSettings,
   providerId: string,
@@ -546,6 +622,11 @@ export function resolveLlmProviderModel(
 
 export function isLlmReady(settings: LlmIntegrationSettings): boolean {
   const endpoint = resolveWikiLlmModel(settings)
+  return endpoint !== undefined && endpoint.apiKeyConfigured && endpoint.model.trim().length > 0
+}
+
+export function isTranscriptionReady(settings: LlmIntegrationSettings): boolean {
+  const endpoint = resolveTranscriptionLlmModel(settings)
   return endpoint !== undefined && endpoint.apiKeyConfigured && endpoint.model.trim().length > 0
 }
 

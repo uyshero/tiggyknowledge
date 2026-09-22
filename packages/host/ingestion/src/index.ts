@@ -34,7 +34,9 @@ export class KnowledgeIngestion extends Service {
   }
 
   async ingest(libraryId: string, files: IngestionFile[]): Promise<IngestionBatchResult> {
-    if (this.ctx.knowledgeCatalog.getLibrary(libraryId) === undefined) throw new RangeError('知识库不存在')
+    const library = this.ctx.knowledgeCatalog.getLibrary(libraryId)
+    if (library === undefined) throw new RangeError('知识库不存在')
+    if (library.kind === 'studio') throw new RangeError('创作空间不能导入知识库文件')
     if (files.length === 0) throw new RangeError('至少选择一个文件')
     const jobId = this.ctx.knowledgeCatalog.createIngestionJob(libraryId, files.length)
     const results: IngestionFileResult[] = []

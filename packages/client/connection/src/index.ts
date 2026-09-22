@@ -4,6 +4,11 @@ import type {
   CreateKnowledgeLibraryInput,
   CreateKnowledgeNoteInput,
   CreateKnowledgeUrlInput,
+  AttachStudioNoteImageInput,
+  CreateStudioCategoryInput,
+  CreateStudioNoteInput,
+  DeleteStudioCategoryInput,
+  CreateStudioRecordingInput,
   CreateWikiIssueInput,
   DeleteKnowledgeLibraryResult,
   GenerateDshIntegrationAccessKeyResult,
@@ -26,6 +31,7 @@ import type {
   OpenDataDirectoryResult,
   PluginInventoryEntry,
   RevertWikiPageInput,
+  TransferStudioDocumentInput,
   UnlockWikiPageInput,
   PublishWikiPageInput,
   KnowledgeTagList,
@@ -38,6 +44,9 @@ import type {
   StartWikiGenerationInput,
   SystemSnapshot,
   SettingsSnapshot,
+  RenameStudioCategoryInput,
+  StudioNoteImageAttachment,
+  StudioWorkspace,
   TestLlmConnectionInput,
   TestLlmConnectionResult,
   UpdateLlmIntegrationSettingsInput,
@@ -58,6 +67,7 @@ import type {
   UpdateKnowledgeDocumentTitleInput,
   UpdateKnowledgeMarkdownNoteInput,
   UpdateKnowledgeUrlExtractedContentInput,
+  UpdateStudioRecordingInput,
   UpdateKnowledgeLibraryInput,
   RenameKnowledgeTagInput,
 } from '@tiggyknowledge/contracts'
@@ -417,6 +427,98 @@ export class ConnectionService extends Service {
 
   async createNote(libraryId: string, input: CreateKnowledgeNoteInput, signal?: AbortSignal): Promise<KnowledgeDocument> {
     return await this.request<KnowledgeDocument>(`/api/libraries/${encodeURIComponent(libraryId)}/notes`, {
+      body: JSON.stringify(input),
+      headers: { 'content-type': 'application/json' },
+      method: 'POST',
+      ...(signal === undefined ? {} : { signal }),
+    })
+  }
+
+  async studio(signal?: AbortSignal): Promise<StudioWorkspace> {
+    return await this.request<StudioWorkspace>('/api/studio', signal === undefined ? {} : { signal })
+  }
+
+  async createStudioNote(input: CreateStudioNoteInput, signal?: AbortSignal): Promise<KnowledgeDocument> {
+    return await this.request<KnowledgeDocument>('/api/studio/notes', {
+      body: JSON.stringify(input),
+      headers: { 'content-type': 'application/json' },
+      method: 'POST',
+      ...(signal === undefined ? {} : { signal }),
+    })
+  }
+
+  async updateStudioNote(documentId: string, input: CreateStudioNoteInput, signal?: AbortSignal): Promise<KnowledgeDocument> {
+    return await this.request<KnowledgeDocument>(`/api/studio/notes/${encodeURIComponent(documentId)}`, {
+      body: JSON.stringify(input),
+      headers: { 'content-type': 'application/json' },
+      method: 'PUT',
+      ...(signal === undefined ? {} : { signal }),
+    })
+  }
+
+  async attachStudioNoteImage(documentId: string, input: AttachStudioNoteImageInput, signal?: AbortSignal): Promise<StudioNoteImageAttachment> {
+    return await this.request<StudioNoteImageAttachment>(`/api/studio/notes/${encodeURIComponent(documentId)}/images`, {
+      body: JSON.stringify(input),
+      headers: { 'content-type': 'application/json' },
+      method: 'POST',
+      ...(signal === undefined ? {} : { signal }),
+    })
+  }
+
+  async createStudioRecording(input: CreateStudioRecordingInput, signal?: AbortSignal): Promise<KnowledgeDocument> {
+    return await this.request<KnowledgeDocument>('/api/studio/recordings', {
+      body: JSON.stringify(input),
+      headers: { 'content-type': 'application/json' },
+      method: 'POST',
+      ...(signal === undefined ? {} : { signal }),
+    })
+  }
+
+  async updateStudioRecording(documentId: string, input: UpdateStudioRecordingInput, signal?: AbortSignal): Promise<KnowledgeDocument> {
+    return await this.request<KnowledgeDocument>(`/api/studio/recordings/${encodeURIComponent(documentId)}`, {
+      body: JSON.stringify(input),
+      headers: { 'content-type': 'application/json' },
+      method: 'PUT',
+      ...(signal === undefined ? {} : { signal }),
+    })
+  }
+
+  async transcribeStudioRecording(documentId: string, signal?: AbortSignal): Promise<KnowledgeDocument> {
+    return await this.request<KnowledgeDocument>(`/api/studio/recordings/${encodeURIComponent(documentId)}/transcribe`, {
+      method: 'POST',
+      ...(signal === undefined ? {} : { signal }),
+    })
+  }
+
+  async transferStudioDocument(documentId: string, input: TransferStudioDocumentInput, signal?: AbortSignal): Promise<KnowledgeDocument> {
+    return await this.request<KnowledgeDocument>(`/api/studio/documents/${encodeURIComponent(documentId)}/transfer`, {
+      body: JSON.stringify(input),
+      headers: { 'content-type': 'application/json' },
+      method: 'POST',
+      ...(signal === undefined ? {} : { signal }),
+    })
+  }
+
+  async createStudioCategory(input: CreateStudioCategoryInput, signal?: AbortSignal): Promise<StudioWorkspace> {
+    return await this.request<StudioWorkspace>('/api/studio/categories', {
+      body: JSON.stringify(input),
+      headers: { 'content-type': 'application/json' },
+      method: 'POST',
+      ...(signal === undefined ? {} : { signal }),
+    })
+  }
+
+  async renameStudioCategory(input: RenameStudioCategoryInput, signal?: AbortSignal): Promise<StudioWorkspace> {
+    return await this.request<StudioWorkspace>('/api/studio/categories/rename', {
+      body: JSON.stringify(input),
+      headers: { 'content-type': 'application/json' },
+      method: 'POST',
+      ...(signal === undefined ? {} : { signal }),
+    })
+  }
+
+  async deleteStudioCategory(input: DeleteStudioCategoryInput, signal?: AbortSignal): Promise<StudioWorkspace> {
+    return await this.request<StudioWorkspace>('/api/studio/categories/delete', {
       body: JSON.stringify(input),
       headers: { 'content-type': 'application/json' },
       method: 'POST',
