@@ -14,6 +14,7 @@ export default defineConfig({
       { find: /^@deepseek-ai\/cordis-plugin-loader$/, replacement: source('../../vendor/loader/src/index.ts') },
       { find: /^@tiggyknowledge\/client-runtime$/, replacement: source('../../packages/client/runtime/src/index.ts') },
       { find: /^@tiggyknowledge\/client-connection$/, replacement: source('../../packages/client/connection/src/index.ts') },
+      { find: /^@tiggyknowledge\/client-preview-text$/, replacement: source('../../packages/client/preview-text/src/index.tsx') },
     ],
   },
   define: {

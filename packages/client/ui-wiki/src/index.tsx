@@ -72,6 +72,36 @@ function inlineMarkdown(text: string, keyPrefix: string, onWikiLink?: (slug: str
   return result
 }
 
+function splitTableCells(line: string): string[] {
+  const trimmed = line.trim()
+  const inner = trimmed.startsWith('|') ? trimmed.slice(1) : trimmed
+  const withoutEnd = inner.endsWith('|') ? inner.slice(0, -1) : inner
+  return withoutEnd.split('|').map(cell => cell.trim())
+}
+
+function isTableSeparator(line: string): boolean {
+  const cells = splitTableCells(line)
+  return cells.length > 0 && cells.every(cell => /^:?-{3,}:?$/.test(cell))
+}
+
+function isTableRow(line: string): boolean {
+  const trimmed = line.trim()
+  return trimmed.includes('|') && !trimmed.startsWith('```')
+}
+
+function looksLikeTable(lines: string[], index: number): boolean {
+  return isTableRow(lines[index] ?? '') && isTableSeparator(lines[index + 1] ?? '')
+}
+
+function alignmentOf(cell: string): 'left' | 'center' | 'right' | undefined {
+  const left = cell.startsWith(':')
+  const right = cell.endsWith(':')
+  if (left && right) return 'center'
+  if (right) return 'right'
+  if (left) return 'left'
+  return undefined
+}
+
 function Markdown({ content, onWikiLink }: { content: string, onWikiLink?: (slug: string) => void }): JSX.Element {
   const blocks: ReactNode[] = []
   const lines = content.replace(/\r\n?/g, '\n').split('\n')
@@ -107,6 +137,47 @@ function Markdown({ content, onWikiLink }: { content: string, onWikiLink?: (slug
       index += 1
       continue
     }
+    if (looksLikeTable(lines, index)) {
+      const header = splitTableCells(line)
+      const alignments = splitTableCells(lines[index + 1] ?? '').map(alignmentOf)
+      const rows: string[][] = []
+      index += 2
+      while (index < lines.length && isTableRow(lines[index] ?? '') && !isTableSeparator(lines[index] ?? '')) {
+        rows.push(splitTableCells(lines[index] ?? ''))
+        index += 1
+      }
+      const columnCount = Math.max(header.length, ...rows.map(row => row.length), alignments.length)
+      const pad = (cells: string[]): string[] => Array.from({ length: columnCount }, (_, column) => cells[column] ?? '')
+      blocks.push(
+        <div className="wiki-table-wrap" key={`table-${index}`}>
+          <table>
+            <thead>
+              <tr>
+                {pad(header).map((cell, column) => (
+                  <th key={`th-${column}`} {...(alignments[column] === undefined ? {} : { style: { textAlign: alignments[column] } })}>
+                    {inlineMarkdown(cell, `th-${index}-${column}`, onWikiLink)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            {rows.length > 0 && (
+              <tbody>
+                {rows.map((row, rowIndex) => (
+                  <tr key={`tr-${rowIndex}`}>
+                    {pad(row).map((cell, column) => (
+                      <td key={`td-${rowIndex}-${column}`} {...(alignments[column] === undefined ? {} : { style: { textAlign: alignments[column] } })}>
+                        {inlineMarkdown(cell, `td-${index}-${rowIndex}-${column}`, onWikiLink)}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            )}
+          </table>
+        </div>,
+      )
+      continue
+    }
     if (/^\s*[-*+]\s+/.test(line)) {
       const items: ReactNode[] = []
       while (index < lines.length && /^\s*[-*+]\s+/.test(lines[index] ?? '')) {
@@ -136,7 +207,7 @@ function Markdown({ content, onWikiLink }: { content: string, onWikiLink?: (slug
     }
     const paragraph: string[] = [line]
     index += 1
-    while (index < lines.length && (lines[index] ?? '').trim() !== '' && !/^(#{1,6})\s|^```|^> |^\s*[-*+]\s+|^\s*\d+\.\s+/.test(lines[index] ?? '')) {
+    while (index < lines.length && (lines[index] ?? '').trim() !== '' && !/^(#{1,6})\s|^```|^> |^\s*[-*+]\s+|^\s*\d+\.\s+/.test(lines[index] ?? '') && !looksLikeTable(lines, index)) {
       paragraph.push(lines[index] ?? '')
       index += 1
     }

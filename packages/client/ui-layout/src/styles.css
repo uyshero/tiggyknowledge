@@ -51,11 +51,11 @@ button:focus-visible { outline: 2px solid #737a76; outline-offset: 2px; }
 .boot-state { display: grid; height: 100%; place-items: center; color: #6e756f; font-size: 13px; }
 
 .page { min-height: 100%; }
-.page-header { display: flex; min-height: 88px; align-items: center; justify-content: space-between; gap: 20px; padding: 20px 26px; border-bottom: 1px solid #e8ebe9; }
+.page-header { display: flex; min-height: 88px; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px 20px; padding: 20px 26px; border-bottom: 1px solid #e8ebe9; }
 .page-header h1 { margin: 2px 0 0; font-size: 22px; line-height: 1.2; letter-spacing: 0; }
 .eyebrow { margin: 0; color: #858c87; font-size: 11px; font-weight: 650; text-transform: uppercase; }
-.header-actions { display: flex; align-items: center; gap: 8px; }
-.primary-button, .secondary-button, .danger-button, .icon-button { display: inline-flex; height: 34px; align-items: center; justify-content: center; gap: 7px; border-radius: 5px; cursor: pointer; }
+.header-actions { display: flex; min-width: 0; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
+.primary-button, .secondary-button, .danger-button, .icon-button { display: inline-flex; height: 34px; flex: 0 0 auto; align-items: center; justify-content: center; gap: 7px; border-radius: 5px; cursor: pointer; white-space: nowrap; }
 .primary-button { border: 1px solid #bfc5c1; background: #ffffff; padding: 0 13px; color: #2d322f; font-weight: 600; }
 .primary-button:hover:not(:disabled) { border-color: #aeb5b0; background: #f1f3f2; }
 .secondary-button { border: 1px solid #d8ddda; background: #ffffff; padding: 0 12px; }
@@ -169,9 +169,13 @@ button:focus-visible { outline: 2px solid #737a76; outline-offset: 2px; }
 .note-preview-empty { color: #9aa19c; }
 .note-markdown { color: #2f3531; font-size: 13px; line-height: 1.7; }
 .note-markdown h1, .note-markdown h2, .note-markdown h3 { margin: 0 0 10px; }
-.note-markdown p, .note-markdown ul, .note-markdown ol, .note-markdown pre { margin: 0 0 12px; }
+.note-markdown p, .note-markdown ul, .note-markdown ol, .note-markdown pre, .note-markdown .note-table-wrap { margin: 0 0 12px; }
 .note-markdown pre { overflow: auto; padding: 10px 12px; border-radius: 6px; background: #f1f3f2; font-size: 12px; }
 .note-markdown img, .note-image img { display: block; max-width: 100%; height: auto; border-radius: 6px; border: 1px solid #e4e7e5; }
+.note-table-wrap { max-width: 100%; overflow-x: auto; }
+.note-markdown table { width: max-content; min-width: 100%; border-collapse: collapse; font-size: 13px; }
+.note-markdown th, .note-markdown td { border: 1px solid #d8ddda; padding: 7px 10px; vertical-align: top; }
+.note-markdown th { background: #f3f5f4; color: #3f4641; font-weight: 650; }
 .note-history { min-width: 0; padding-top: 8px; }
 .note-history-current, .note-history article { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 10px; padding: 10px 11px; border: 1px solid #e4e7e5; border-radius: 7px; background: #fff; }
 .note-history-current strong, .note-history article strong { display: block; color: #2d322f; font-size: 12px; }
@@ -227,11 +231,11 @@ button:focus-visible { outline: 2px solid #737a76; outline-offset: 2px; }
 .documents-title { display: flex; min-width: 0; align-items: center; gap: 10px; }
 .documents-title > div { min-width: 0; }
 .documents-title h1 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.documents-toolbar { display: flex; min-height: 54px; flex: 0 0 auto; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 20px; border-bottom: 1px solid #e8ebe9; background: #fafbfa; }
+.documents-toolbar { display: flex; min-height: 54px; flex: 0 0 auto; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 9px 20px; border-bottom: 1px solid #e8ebe9; background: #fafbfa; }
 .documents-toolbar label { display: flex; min-width: 0; align-items: center; gap: 9px; color: #666e69; font-size: 11px; }
 .documents-toolbar select { width: min(280px, 42vw); height: 32px; min-width: 0; border: 1px solid #d5dad7; border-radius: 5px; outline: 0; background: white; padding: 0 28px 0 9px; color: #252927; font-size: 12px; text-overflow: ellipsis; }
 .documents-library-select { flex: 1 1 260px; }
-.documents-view-controls { display: flex; min-width: 0; align-items: center; justify-content: flex-end; gap: 7px; }
+.documents-view-controls { display: flex; min-width: 0; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 7px; }
 .documents-view-controls > label > select { width: 112px; }
 .documents-view-controls > span { color: #7f8782; font-size: 11px; white-space: nowrap; }
 .documents-query { display: flex; width: 150px; height: 32px; align-items: center; gap: 6px !important; padding: 0 9px; border: 1px solid #d5dad7; border-radius: 5px; background: #fff; color: #737a76; }
@@ -261,11 +265,15 @@ button:focus-visible { outline: 2px solid #737a76; outline-offset: 2px; }
 .document-preview-empty { display: flex; min-height: 360px; flex: 1; align-items: center; justify-content: center; flex-direction: column; gap: 8px; color: #858c87; font-size: 12px; text-align: center; }
 .document-preview-empty strong { color: #4b524e; }
 .document-preview-empty.error-state { color: #8e3030; }
-.document-preview-header { display: flex; min-height: 64px; flex: 0 0 auto; align-items: center; justify-content: space-between; gap: 16px; padding: 11px 18px; border-bottom: 1px solid #e8ebe9; }
+.document-preview-header { display: flex; min-height: 64px; flex: 0 0 auto; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px 16px; padding: 11px 18px; border-bottom: 1px solid #e8ebe9; }
 .document-preview-header > div { min-width: 0; }
 .document-preview-header h2 { margin: 0 0 5px; overflow: hidden; font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
 .document-preview-header span { display: block; overflow: hidden; color: #858c87; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
-.preview-actions { display: flex; flex: 0 0 auto; gap: 6px; }
+.preview-actions { display: flex; flex: 0 0 auto; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+.document-preview-dialog { width: min(1100px, 100%); height: min(92vh, 920px); display: flex; flex-direction: column; }
+.document-preview-dialog .dialog-body { min-height: 0; flex: 1 1 auto; overflow: auto; padding: 16px 20px 24px; }
+.document-preview-dialog .text-preview, .document-preview-dialog .note-markdown { min-height: 0; }
+.document-preview-dialog .document-content { min-height: 0; padding: 0 0 24px; }
 .icon-button.favorite-active { border-color: #aeb5b0; background: #e2e4e3; color: #343a36; }
 .icon-button.inspector-active { border-color: #9ea5a1; background: #dfe2e0; color: #242825; }
 .document-detail-inspector { display: flex; flex-direction: column; gap: 14px; padding: 16px 18px 18px; border-top: 1px solid #e8ebe9; background: #fafbfa; }
@@ -517,6 +525,11 @@ button:focus-visible { outline: 2px solid #737a76; outline-offset: 2px; }
   .app-sidebar nav { align-items: center; padding-inline: 10px; }
   .app-sidebar nav button { justify-content: center; padding: 0; }
   .sidebar-toggle { margin: 0; }
+  .page-header { align-items: flex-start; flex-direction: column; }
+  .header-actions { width: 100%; justify-content: flex-start; }
+  .documents-header .header-actions { width: 100%; }
+  .document-preview-header { align-items: flex-start; }
+  .preview-actions { width: 100%; justify-content: flex-start; }
 }
 
 @media (max-width: 720px) {
@@ -548,6 +561,7 @@ button:focus-visible { outline: 2px solid #737a76; outline-offset: 2px; }
   .library-table th:nth-child(3), .library-table td:nth-child(3) { display: none; }
   .dialog-backdrop { align-items: end; padding: 0; }
   .dialog-panel { width: 100%; border-width: 1px 0 0; border-radius: 8px 8px 0 0; }
+  .document-preview-dialog { height: min(94vh, 100%); }
   .ingestion-workspace { padding: 16px 14px 50px; }
   .ingestion-toolbar { grid-template-columns: minmax(0, 1fr); align-items: stretch; gap: 12px; }
   .ingestion-toolbar-fields { align-items: stretch; flex-direction: column; }

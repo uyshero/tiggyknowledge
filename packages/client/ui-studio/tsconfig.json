@@ -12,6 +12,7 @@
     { "path": "../../../vendor/cordis" },
     { "path": "../../core/contracts" },
     { "path": "../connection" },
+    { "path": "../preview-text" },
     { "path": "../runtime" }
   ]
 }

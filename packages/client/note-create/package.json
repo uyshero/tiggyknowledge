@@ -13,11 +13,13 @@
   "peerDependencies": {
     "@deepseek-ai/cordis": "workspace:^",
     "@tiggyknowledge/client-connection": "workspace:^",
+    "@tiggyknowledge/client-preview-text": "workspace:^",
     "@tiggyknowledge/client-runtime": "workspace:^"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "workspace:^",
     "@tiggyknowledge/client-connection": "workspace:^",
+    "@tiggyknowledge/client-preview-text": "workspace:^",
     "@tiggyknowledge/client-runtime": "workspace:^",
     "@tiggyknowledge/contracts": "workspace:^",
     "@types/react": "~18.3.1"

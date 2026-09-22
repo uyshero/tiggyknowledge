@@ -403,6 +403,9 @@ importers:
       '@tiggyknowledge/client-connection':
         specifier: workspace:^
         version: link:../connection
+      '@tiggyknowledge/client-preview-text':
+        specifier: workspace:^
+        version: link:../preview-text
       '@tiggyknowledge/client-runtime':
         specifier: workspace:^
         version: link:../runtime
@@ -844,6 +847,9 @@ importers:
       '@tiggyknowledge/client-connection':
         specifier: workspace:^
         version: link:../connection
+      '@tiggyknowledge/client-preview-text':
+        specifier: workspace:^
+        version: link:../preview-text
       '@tiggyknowledge/client-runtime':
         specifier: workspace:^
         version: link:../runtime

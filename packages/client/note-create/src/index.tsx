@@ -1,9 +1,10 @@
 import type { Context } from '@deepseek-ai/cordis'
 import { ArrowLeft, FilePlus2, History, Save, Undo2 } from 'lucide-react'
-import { useEffect, useMemo, useState, type FormEvent, type JSX, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type FormEvent, type JSX } from 'react'
 import type {} from '@tiggyknowledge/client-connection'
 import type { LibraryActionProps } from '@tiggyknowledge/client-runtime'
 import type {} from '@tiggyknowledge/client-runtime'
+import { MarkdownView } from '@tiggyknowledge/client-preview-text'
 import type { KnowledgeDocumentRevision, KnowledgeLibrary } from '@tiggyknowledge/contracts'
 
 export const inject = ['clientApp', 'connection']
@@ -33,96 +34,6 @@ function parseMarkdownNote(content: string): { title: string, body: string } {
     return { title, body: lines.slice(bodyStart).join('\n').replace(/\s+$/u, '') }
   }
   return { title: '', body: normalized.replace(/\s+$/u, '') }
-}
-
-function safeHref(target: string): string | undefined {
-  try {
-    const url = new URL(target, 'https://knowledge.local')
-    return url.protocol === 'http:' || url.protocol === 'https:' ? target : undefined
-  } catch {
-    return undefined
-  }
-}
-
-function inlineMarkdown(text: string, keyPrefix: string): ReactNode[] {
-  const result: ReactNode[] = []
-  const pattern = /(`[^`\n]+`|\[[^\]\n]+\]\([^\s)\n]+\)|\*\*[^*\n]+\*\*|\*[^*\n]+\*)/g
-  let cursor = 0
-  let match: RegExpExecArray | null
-  while ((match = pattern.exec(text)) !== null) {
-    if (match.index > cursor) result.push(text.slice(cursor, match.index))
-    const token = match[0]
-    const key = `${keyPrefix}-${match.index}`
-    if (token.startsWith('`')) result.push(<code key={key}>{token.slice(1, -1)}</code>)
-    else if (token.startsWith('[')) {
-      const parts = /^\[([^\]]+)\]\(([^)]+)\)$/.exec(token)
-      const href = parts?.[2] === undefined ? undefined : safeHref(parts[2])
-      result.push(href === undefined || parts?.[1] === undefined ? <span key={key}>{token}</span> : <a href={href} key={key} rel="noreferrer">{parts[1]}</a>)
-    } else if (token.startsWith('**')) result.push(<strong key={key}>{token.slice(2, -2)}</strong>)
-    else result.push(<em key={key}>{token.slice(1, -1)}</em>)
-    cursor = match.index + token.length
-  }
-  if (cursor < text.length) result.push(text.slice(cursor))
-  return result
-}
-
-function MarkdownPreview({ content }: { content: string }): JSX.Element {
-  const blocks: ReactNode[] = []
-  const lines = content.replace(/\r\n?/g, '\n').split('\n')
-  let index = 0
-  while (index < lines.length) {
-    const line = lines[index] ?? ''
-    if (line.trim() === '') {
-      index += 1
-      continue
-    }
-    if (line.startsWith('```')) {
-      const code: string[] = []
-      index += 1
-      while (index < lines.length && !(lines[index] ?? '').startsWith('```')) {
-        code.push(lines[index] ?? '')
-        index += 1
-      }
-      index += index < lines.length ? 1 : 0
-      blocks.push(<pre key={`code-${index}`}><code>{code.join('\n')}</code></pre>)
-      continue
-    }
-    const heading = /^(#{1,6})\s+(.+)$/.exec(line)
-    if (heading !== null) {
-      const level = (heading[1] ?? '').length
-      const children = inlineMarkdown(heading[2] ?? '', `heading-${index}`)
-      const key = `heading-${index}`
-      blocks.push(level === 1 ? <h1 key={key}>{children}</h1> : level === 2 ? <h2 key={key}>{children}</h2> : <h3 key={key}>{children}</h3>)
-      index += 1
-      continue
-    }
-    if (/^\s*[-*+]\s+/.test(line)) {
-      const items: ReactNode[] = []
-      while (index < lines.length && /^\s*[-*+]\s+/.test(lines[index] ?? '')) {
-        items.push(<li key={`item-${index}`}>{inlineMarkdown((lines[index] ?? '').replace(/^\s*[-*+]\s+/, ''), `item-${index}`)}</li>)
-        index += 1
-      }
-      blocks.push(<ul key={`list-${index}`}>{items}</ul>)
-      continue
-    }
-    if (/^\s*\d+\.\s+/.test(line)) {
-      const items: ReactNode[] = []
-      while (index < lines.length && /^\s*\d+\.\s+/.test(lines[index] ?? '')) {
-        items.push(<li key={`item-${index}`}>{inlineMarkdown((lines[index] ?? '').replace(/^\s*\d+\.\s+/, ''), `item-${index}`)}</li>)
-        index += 1
-      }
-      blocks.push(<ol key={`list-${index}`}>{items}</ol>)
-      continue
-    }
-    const paragraph: string[] = [line]
-    index += 1
-    while (index < lines.length && (lines[index] ?? '').trim() !== '' && !/^(#{1,6})\s|^```|^\s*[-*+]\s+|^\s*\d+\.\s+/.test(lines[index] ?? '')) {
-      paragraph.push(lines[index] ?? '')
-      index += 1
-    }
-    blocks.push(<p key={`paragraph-${index}`}>{inlineMarkdown(paragraph.join(' '), `paragraph-${index}`)}</p>)
-  }
-  return <div className="note-markdown">{blocks.length === 0 ? <p className="note-preview-empty">右侧会同步显示 Markdown 预览。</p> : blocks}</div>
 }
 
 export function apply(ctx: Context): void {
@@ -273,7 +184,7 @@ export function apply(ctx: Context): void {
               </label>
               <section className="note-preview-pane" aria-label="实时预览">
                 <p className="note-preview-label">预览</p>
-                <MarkdownPreview content={preview} />
+                <MarkdownView content={preview} empty={<p className="note-preview-empty">右侧会同步显示 Markdown 预览。</p>} />
               </section>
             </div>
             {libraries.length === 0 && !loading && <div className="form-error" role="alert">请先创建知识库。</div>}

@@ -1,5 +1,5 @@
 import type { Context } from '@deepseek-ai/cordis'
-import { ArrowLeft, BadgeInfo, FilePenLine, FileText, Link2, Mic, Search, Star, Tag, Trash2, Upload, X } from 'lucide-react'
+import { ArrowLeft, BadgeInfo, FilePenLine, FileText, Link2, Maximize2, Mic, Search, Star, Tag, Trash2, Upload, X } from 'lucide-react'
 import { Fragment, useEffect, useMemo, useRef, useState, useSyncExternalStore, type JSX, type ReactNode } from 'react'
 import type {} from '@tiggyknowledge/client-connection'
 import type {} from '@tiggyknowledge/client-runtime'
@@ -269,6 +269,7 @@ export function apply(ctx: Context): void {
     const [editMarkdown, setEditMarkdown] = useState(false)
     const [editSaving, setEditSaving] = useState(false)
     const [editError, setEditError] = useState<string>()
+    const [previewExpanded, setPreviewExpanded] = useState(false)
     const lastPageStateRef = useRef(app.pageState)
     const externalPageStateChanged = !Object.is(lastPageStateRef.current, app.pageState)
     const pendingExternalRouteRef = useRef<DocumentPageState>()
@@ -344,6 +345,15 @@ export function apply(ctx: Context): void {
     }, [])
 
     useEffect(() => {
+      if (!previewExpanded) return
+      const closeOnEscape = (event: KeyboardEvent): void => {
+        if (event.key === 'Escape') setPreviewExpanded(false)
+      }
+      window.addEventListener('keydown', closeOnEscape)
+      return () => window.removeEventListener('keydown', closeOnEscape)
+    }, [previewExpanded])
+
+    useEffect(() => {
       if (libraryId.length === 0 || selectedDocumentId === undefined) return
       if (documents.some(document => document.id === selectedDocumentId)) return
       const controller = new AbortController()
@@ -358,6 +368,7 @@ export function apply(ctx: Context): void {
         setPreview(undefined)
         setMetadata(undefined)
         setPreviewError(undefined)
+        setPreviewExpanded(false)
         return
       }
       const controller = new AbortController()
@@ -401,6 +412,7 @@ export function apply(ctx: Context): void {
       setTargetLocation(undefined)
       setTargetQuery(undefined)
       setActiveInspectorId(undefined)
+      setPreviewExpanded(false)
       setEditDialogOpen(false)
     }
 
@@ -629,6 +641,7 @@ export function apply(ctx: Context): void {
                 <header className="document-preview-header">
                   <div><h2>{preview.document.title}</h2><span>{preview.document.originalName} · {formatSourceType(preview.format)}{preview.pageCount === undefined ? '' : ` · ${preview.pageCount} 页`}{targetLocation === undefined ? '' : ` · ${targetLocation}`}</span></div>
                   <div className="preview-actions">
+                    <button className="icon-button" type="button" title="放大查看" onClick={() => { setActiveInspectorId(undefined); setPreviewExpanded(true) }}><Maximize2 size={16} /></button>
                     {app.documentInspectors.map(inspector => {
                       const InspectorIcon = inspector.icon
                       const active = inspector.id === activeInspectorId
@@ -670,6 +683,35 @@ export function apply(ctx: Context): void {
             ) : null}
           </section>
         </div>
+
+        {previewExpanded && preview !== undefined && (
+          <div className="dialog-backdrop">
+            <section className="dialog-panel document-preview-dialog" role="dialog" aria-modal="true" aria-labelledby="document-preview-dialog-title">
+              <header className="dialog-header">
+                <div>
+                  <p className="eyebrow">{formatSourceType(preview.format)}</p>
+                  <h2 id="document-preview-dialog-title">{preview.document.title}</h2>
+                </div>
+                <button className="dialog-close" type="button" title="关闭" onClick={() => setPreviewExpanded(false)}><X size={18} /></button>
+              </header>
+              <div className="dialog-body">
+                {PreviewRenderer === undefined ? (
+                  <>
+                    <pre className="document-content">{highlightedPreview(preview, targetLocation, targetQuery)}</pre>
+                    {preview.truncated && <div className="preview-truncated">内容较大，仅显示当前解析插件提取的前 200,000 个字符。</div>}
+                  </>
+                ) : (
+                  <PreviewRenderer
+                    contentUrl={ctx.connection.documentContentUrl(preview.document.id)}
+                    preview={preview}
+                    {...(targetLocation === undefined ? {} : { targetLocation })}
+                    {...(targetQuery === undefined ? {} : { targetQuery })}
+                  />
+                )}
+              </div>
+            </section>
+          </div>
+        )}
 
         {confirmIds !== undefined && (
           <div className="dialog-backdrop">

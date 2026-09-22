@@ -1,5 +1,8 @@
-.studio-note-toolbar { display: flex; flex: 0 0 auto; align-items: center; gap: 10px; padding: 8px 20px 0; }
+.studio-note-toolbar { display: flex; flex: 0 0 auto; align-items: center; flex-wrap: wrap; gap: 10px; padding: 8px 20px 0; }
 .studio-note-toolbar span { color: #8b928d; font-size: 11px; }
+.studio-note-mode { display: inline-flex; margin-left: auto; overflow: hidden; border: 1px solid #d8ddda; border-radius: 5px; }
+.studio-note-mode button { height: 28px; padding: 0 11px; border: 0; background: transparent; color: #5f6762; cursor: pointer; font-size: 11px; }
+.studio-note-mode button.active { background: #e2e4e3; color: #2d322f; font-weight: 650; }
 .studio-table th:nth-child(2) { width: 72px; }
 .studio-editor-actions { margin-top: 18px; }
 .studio-page .header-actions { flex-wrap: wrap; justify-content: flex-end; }
@@ -26,8 +29,9 @@
 .studio-note-editor .note-title-field input, .studio-recording-editor .note-title-field input { width: 100%; height: 36px; border: 0; outline: 0; background: transparent; color: #242825; font-size: 18px; font-weight: 650; }
 .studio-category-field { margin: 0; }
 .studio-category-field span { color: #858c87; font-size: 10px; }
-.studio-note-editor .note-split { min-height: 0; flex: 1 1 auto; border: 0; border-top: 1px solid #e1e5e2; border-radius: 0; }
-.studio-note-editor .note-body-field { display: flex; min-height: 0; flex-direction: column; }
+.studio-note-editor .note-split { display: flex; min-height: 0; flex: 1 1 auto; flex-direction: column; border: 0; border-top: 1px solid #e1e5e2; border-radius: 0; }
+.studio-note-editor .note-preview-pane { flex: 1 1 auto; overflow: auto; background: #fff; padding: 16px 20px 28px; }
+.studio-note-editor .note-body-field { display: flex; min-height: 0; flex: 1 1 auto; flex-direction: column; }
 .studio-note-editor .note-body-field textarea { min-height: 0; height: 100%; flex: 1 1 auto; }
 .studio-recording-editor { gap: 14px; overflow: auto; padding: 16px 20px 28px; }
 .studio-recording-editor .studio-editor-meta { padding: 0; }
@@ -35,11 +39,13 @@
 .studio-audio { width: 100%; }
 .studio-record-panel { display: flex; align-items: center; gap: 12px; }
 .studio-recording-live { color: #8e3030; font-size: 12px; }
-.studio-recording-hint { margin: 0; color: #7c847f; font-size: 12px; }
+.studio-recording-hint { margin: 0; color: #7c847f; font-size: 11px; }
 .studio-transcript-field textarea { min-height: 220px; }
 .studio-status { flex: 0 0 auto; margin: 0; padding: 0 20px 14px; color: #3f6d45; font-size: 12px; }
 .studio-banner { margin: 0 20px 12px; }
 
 @media (max-width: 720px) {
   .studio-recording { padding: 18px 16px 48px; }
+  .studio-editor-meta { grid-template-columns: minmax(0, 1fr); }
+  .studio-note-mode { margin-left: 0; }
 }

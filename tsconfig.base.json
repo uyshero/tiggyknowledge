@@ -79,6 +79,7 @@
       "@tiggyknowledge/client-settings-plugins": ["./packages/client/settings-plugins/src"],
       "@tiggyknowledge/client-preview-pdf": ["./packages/client/preview-pdf/src"],
       "@tiggyknowledge/client-preview-url": ["./packages/client/preview-url/src"],
+      "@tiggyknowledge/client-preview-text": ["./packages/client/preview-text/src"],
       "@tiggyknowledge/client-url-create": ["./packages/client/url-create/src"],
       "@tiggyknowledge/client-ui-knowledge": ["./packages/client/ui-knowledge/src"],
       "@tiggyknowledge/client-ui-ingestion": ["./packages/client/ui-ingestion/src"],
