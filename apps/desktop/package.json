@@ -1,6 +1,6 @@
 {
   "name": "@tiggyknowledge/desktop",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Desktop client for the local-first TiggyKnowledge knowledge base",
   "author": "TiggyKnowledge",
   "private": true,
