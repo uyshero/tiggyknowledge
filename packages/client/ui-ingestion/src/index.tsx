@@ -8,7 +8,7 @@ import type { IngestionBatchResult, KnowledgeLibrary } from '@tiggyknowledge/con
 export const inject = ['clientApp', 'connection']
 
 const ACCEPTED_EXTENSIONS = ['.txt', '.md', '.markdown', '.pdf', '.url', '.webloc']
-const MAX_FILE_SIZE = 25 * 1024 * 1024
+const MAX_FILE_SIZE = 200 * 1024 * 1024
 
 function formatBytes(size: number): string {
   if (size < 1024) return `${size} B`
@@ -59,7 +59,7 @@ export function apply(ctx: Context): void {
         if (!ACCEPTED_EXTENSIONS.some(extension => lower.endsWith(extension))) {
           rejected.push(`${file.name}：格式不支持`)
         } else if (file.size > MAX_FILE_SIZE) {
-          rejected.push(`${file.name}：超过 25 MB`)
+          rejected.push(`${file.name}：超过 200 MB`)
         } else {
           accepted.push(file)
         }
@@ -117,7 +117,7 @@ export function apply(ctx: Context): void {
               <label><span>目标知识库</span><select disabled={loading || uploading || libraries.length === 0} value={libraryId} onChange={event => setLibraryId(event.target.value)}>{libraries.map(library => <option key={library.id} value={library.id}>{library.name}</option>)}</select></label>
               <label className="ingestion-tag-field"><span>批量标签</span><input disabled={uploading} maxLength={340} value={tagInput} onChange={event => setTagInput(event.target.value)} placeholder="产品，规范" /></label>
             </div>
-            <div className="ingestion-toolbar-info"><strong>支持 TXT、Markdown、文本型 PDF、网址快捷方式</strong><span>单文件不超过 25 MB，每批最多 50 个</span></div>
+            <div className="ingestion-toolbar-info"><strong>支持 TXT、Markdown、文本型 PDF、网址快捷方式</strong><span>单文件不超过 200 MB，每批最多 50 个。超过 500 页的 PDF 仍可导入，检索和 Wiki 使用前 500 页文本</span></div>
           </section>
           {libraries.length === 0 && !loading ? (
             <div className="workspace-state"><span>请先创建一个知识库，再导入文件。</span><button className="secondary-button" type="button" onClick={() => ctx.clientApp.selectPage('knowledge')}>返回知识库</button></div>

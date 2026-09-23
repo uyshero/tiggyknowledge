@@ -666,6 +666,8 @@ export function apply(ctx: Context): void {
                     {...(metadata === undefined ? {} : { metadata })}
                     preview={preview}
                   />
+                ) : previewExpanded ? (
+                  <div className="document-preview-empty"><strong>已在放大窗口中查看</strong></div>
                 ) : PreviewRenderer === undefined ? (
                   <>
                     <pre className="document-content" ref={previewRef}>{highlightedPreview(preview, targetLocation, targetQuery)}</pre>
@@ -686,7 +688,7 @@ export function apply(ctx: Context): void {
 
         {previewExpanded && preview !== undefined && (
           <div className="dialog-backdrop">
-            <section className="dialog-panel document-preview-dialog" role="dialog" aria-modal="true" aria-labelledby="document-preview-dialog-title">
+            <section className={`dialog-panel document-preview-dialog${preview.format === 'pdf' || preview.format === 'url' ? ' document-preview-dialog-fill' : ''}`} role="dialog" aria-modal="true" aria-labelledby="document-preview-dialog-title">
               <header className="dialog-header">
                 <div>
                   <p className="eyebrow">{formatSourceType(preview.format)}</p>

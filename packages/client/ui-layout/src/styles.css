@@ -270,10 +270,16 @@ button:focus-visible { outline: 2px solid #737a76; outline-offset: 2px; }
 .document-preview-header h2 { margin: 0 0 5px; overflow: hidden; font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
 .document-preview-header span { display: block; overflow: hidden; color: #858c87; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .preview-actions { display: flex; flex: 0 0 auto; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
-.document-preview-dialog { width: min(1100px, 100%); height: min(92vh, 920px); display: flex; flex-direction: column; }
-.document-preview-dialog .dialog-body { min-height: 0; flex: 1 1 auto; overflow: auto; padding: 16px 20px 24px; }
+.document-preview-dialog { width: min(1440px, calc(100vw - 32px)); height: min(96vh, calc(100vh - 32px)); display: flex; flex-direction: column; }
+.document-preview-dialog .dialog-header { flex: 0 0 auto; }
+.document-preview-dialog .dialog-body { display: flex; min-height: 0; flex: 1 1 auto; flex-direction: column; gap: 0; overflow: auto; padding: 16px 20px 24px; }
 .document-preview-dialog .text-preview, .document-preview-dialog .note-markdown { min-height: 0; }
 .document-preview-dialog .document-content { min-height: 0; padding: 0 0 24px; }
+.document-preview-dialog-fill .dialog-body { overflow: hidden; padding: 0; }
+.document-preview-dialog-fill .pdf-preview,
+.document-preview-dialog-fill .url-preview,
+.document-preview-dialog-fill .audio-preview { flex: 1 1 auto; min-height: 0; height: 100%; }
+.document-preview-dialog-fill .url-preview-host { min-height: 0; }
 .icon-button.favorite-active { border-color: #aeb5b0; background: #e2e4e3; color: #343a36; }
 .icon-button.inspector-active { border-color: #9ea5a1; background: #dfe2e0; color: #242825; }
 .document-detail-inspector { display: flex; flex-direction: column; gap: 14px; padding: 16px 18px 18px; border-top: 1px solid #e8ebe9; background: #fafbfa; }
@@ -561,7 +567,7 @@ button:focus-visible { outline: 2px solid #737a76; outline-offset: 2px; }
   .library-table th:nth-child(3), .library-table td:nth-child(3) { display: none; }
   .dialog-backdrop { align-items: end; padding: 0; }
   .dialog-panel { width: 100%; border-width: 1px 0 0; border-radius: 8px 8px 0 0; }
-  .document-preview-dialog { height: min(94vh, 100%); }
+  .document-preview-dialog { width: 100%; height: min(96vh, 100%); }
   .ingestion-workspace { padding: 16px 14px 50px; }
   .ingestion-toolbar { grid-template-columns: minmax(0, 1fr); align-items: stretch; gap: 12px; }
   .ingestion-toolbar-fields { align-items: stretch; flex-direction: column; }

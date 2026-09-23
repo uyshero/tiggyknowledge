@@ -70,15 +70,15 @@ export class PdfProducer extends Service {
     let document: Awaited<typeof loadingTask.promise> | undefined
     try {
       document = await loadingTask.promise
-      if (document.numPages > MAX_PDF_PAGES) throw new Error(`PDF 超过 ${MAX_PDF_PAGES} 页限制`)
       const metadata = await document.getMetadata().catch(() => undefined)
       const info = metadata?.info as Record<string, unknown> | undefined
       const fallback = basename(fileName, extname(fileName)).trim() || fileName
       const title = readableTitle(info?.Title) ?? fallback
       const pages: string[] = []
       let characters = 0
-      let truncated = false
-      for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
+      const pageLimit = Math.min(document.numPages, MAX_PDF_PAGES)
+      let truncated = document.numPages > MAX_PDF_PAGES
+      for (let pageNumber = 1; pageNumber <= pageLimit; pageNumber += 1) {
         const page = await document.getPage(pageNumber)
         const content = await page.getTextContent()
         const extracted = pageText(content.items)

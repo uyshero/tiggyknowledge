@@ -41,8 +41,8 @@ export interface HttpRouteDefinition {
 }
 
 const MAX_JSON_BODY_BYTES = 16 * 1024
-const MAX_UPLOAD_BODY_BYTES = 50 * 1024 * 1024
-const MAX_UPLOAD_FILE_BYTES = 25 * 1024 * 1024
+const MAX_UPLOAD_FILE_BYTES = 200 * 1024 * 1024
+const MAX_UPLOAD_BODY_BYTES = 220 * 1024 * 1024
 const MAX_UPLOAD_FILES = 50
 
 export class HttpRouter extends Service {
@@ -174,7 +174,7 @@ async function readUpload(request: IncomingMessage): Promise<HttpUpload> {
   const files: HttpUpload['files'] = []
   for (const entry of entries) {
     if (!(entry instanceof File)) throw new HttpError(400, 'invalid_file', '上传字段必须是文件')
-    if (entry.size > MAX_UPLOAD_FILE_BYTES) throw new HttpError(413, 'file_too_large', `${entry.name} 超过 25 MB`)
+    if (entry.size > MAX_UPLOAD_FILE_BYTES) throw new HttpError(413, 'file_too_large', `${entry.name} 超过 200 MB`)
     const name = entry.name.replaceAll('\\', '/').split('/').at(-1)?.trim() ?? ''
     if (name.length === 0 || name.length > 255) throw new HttpError(400, 'invalid_file_name', '文件名无效')
     files.push({ name, bytes: new Uint8Array(await entry.arrayBuffer()) })

@@ -845,7 +845,7 @@ export function apply(ctx: Context): void {
               ) : (
                 <>
                   <header>
-                    <div>
+                    <div className="wiki-page-heading">
                       <h1>{page.title}</h1>
                       <span>{pageTypeLabel(page.pageType)} · {page.status} · v{page.version} · 更新于 {new Date(page.updatedAt).toLocaleString()}</span>
                     </div>

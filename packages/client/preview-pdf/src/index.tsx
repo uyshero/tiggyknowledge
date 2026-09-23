@@ -70,7 +70,7 @@ function PdfDocumentPreview({ contentUrl, preview, targetLocation, targetQuery }
   const moveToPage = (next: number): void => {
     setPageNumber(Math.min(Math.max(1, next), Math.max(1, pageCount)))
   }
-  const pageWidth = Math.max(240, Math.min(920, stageWidth - 48))
+  const pageWidth = Math.max(240, stageWidth - 48)
 
   return (
     <section className="pdf-preview" aria-label="PDF 页面预览">
@@ -134,7 +134,7 @@ function PdfDocumentPreview({ contentUrl, preview, targetLocation, targetQuery }
       ) : (
         <pre className="document-content pdf-text-content">{highlightedText(preview.content, targetLocation, targetQuery)}</pre>
       )}
-      {mode === 'text' && preview.truncated && <div className="preview-truncated">内容较大，仅显示当前解析插件提取的前 200,000 个字符。</div>}
+      {mode === 'text' && preview.truncated && <div className="preview-truncated">检索和 Wiki 只使用已提取的文本（最多前 500 页或约 200 万字），页面预览仍可翻阅全文。</div>}
     </section>
   )
 }
