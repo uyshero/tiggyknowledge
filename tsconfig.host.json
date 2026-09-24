@@ -43,6 +43,7 @@
     { "path": "./packages/host/llm-client" },
     { "path": "./packages/host/llm-wiki" },
     { "path": "./packages/host/llm-api" },
+    { "path": "./packages/host/mineru-api" },
     { "path": "./packages/host/library-chat" },
     { "path": "./packages/host/library-chat-api" },
     { "path": "./packages/host/wiki-governance" },

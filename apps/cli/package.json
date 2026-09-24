@@ -52,6 +52,7 @@
     "@tiggyknowledge/llm-client": "workspace:^",
     "@tiggyknowledge/llm-wiki": "workspace:^",
     "@tiggyknowledge/llm-api": "workspace:^",
+    "@tiggyknowledge/mineru-api": "workspace:^",
     "@tiggyknowledge/library-chat": "workspace:^",
     "@tiggyknowledge/library-chat-api": "workspace:^",
     "@tiggyknowledge/wiki-governance": "workspace:^",

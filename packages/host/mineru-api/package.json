@@ -1,0 +1,35 @@
+{
+  "name": "@tiggyknowledge/mineru-api",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    }
+  },
+  "dependencies": {
+    "fflate": "^0.8.2"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "workspace:^",
+    "@tiggyknowledge/documents": "workspace:^",
+    "@tiggyknowledge/llm-credentials": "workspace:^",
+    "@tiggyknowledge/plugin-surface": "workspace:^",
+    "@tiggyknowledge/producer-pdf": "workspace:^",
+    "@tiggyknowledge/settings-file": "workspace:^"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "workspace:^",
+    "@tiggyknowledge/contracts": "workspace:^",
+    "@tiggyknowledge/documents": "workspace:^",
+    "@tiggyknowledge/http-router": "workspace:^",
+    "@tiggyknowledge/llm-credentials": "workspace:^",
+    "@tiggyknowledge/plugin-surface": "workspace:^",
+    "@tiggyknowledge/producer-pdf": "workspace:^",
+    "@tiggyknowledge/settings-file": "workspace:^"
+  }
+}

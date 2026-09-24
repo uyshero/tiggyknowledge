@@ -69,6 +69,18 @@ export class LlmCredentials extends Service {
     return environmentStatus()
   }
 
+  storedStatus(key: string): LlmProviderCredentialStatus {
+    const stored = this.read().providers[key]
+    return stored === undefined ? { configured: false } : { configured: true, preview: stored.preview }
+  }
+
+  getStoredApiKey(key: string): string {
+    const stored = this.read().providers[key]
+    if (stored === undefined) throw new Error('尚未配置 API Key')
+    if (this.ctx.secretCodec === undefined) throw new Error('当前运行模式无法解密 API Key')
+    return this.ctx.secretCodec.decrypt(stored.encryptedApiKey)
+  }
+
   getApiKey(providerId: string): string {
     const stored = this.read().providers[providerId]
     if (stored !== undefined) {
@@ -83,10 +95,14 @@ export class LlmCredentials extends Service {
   }
 
   setApiKey(providerId: string, apiKey: string): LlmProviderCredentialStatus {
-    const id = typeof providerId === 'string' ? providerId.trim() : ''
+    return this.setStoredApiKey(providerId, apiKey, 'LLM API Key')
+  }
+
+  setStoredApiKey(key: string, apiKey: string, label = 'API Key'): LlmProviderCredentialStatus {
+    const id = typeof key === 'string' ? key.trim() : ''
     if (!/^[A-Za-z0-9][A-Za-z0-9_-]{1,63}$/.test(id)) throw new RangeError('提供方 ID 无效')
     const value = apiKey.trim()
-    if (value.length < 8 || value.length > 2_000) throw new RangeError('LLM API Key 长度无效')
+    if (value.length < 8 || value.length > 2_000) throw new RangeError(`${label}长度无效`)
     if (this.ctx.secretCodec === undefined) {
       throw new Error('当前运行模式不支持安全保存 API Key，请设置 TIGGYKNOWLEDGE_LLM_API_KEY')
     }

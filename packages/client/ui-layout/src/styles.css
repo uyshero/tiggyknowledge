@@ -362,7 +362,12 @@ button:focus-visible { outline: 2px solid #737a76; outline-offset: 2px; }
 .pdf-render-state { display: flex; width: min(460px, calc(100vw - 110px)); min-height: 320px; align-items: center; justify-content: center; flex-direction: column; gap: 7px; color: #737a76; font-size: 12px; }
 .pdf-render-state.error-state { color: #8e3030; }
 .pdf-text-content { background: #fff; }
-.pdf-ocr-status { flex: 0 0 auto; padding: 8px 12px; border-top: 1px solid #d9ddda; background: #f8f9f8; color: #59615c; font-size: 11px; }
+.pdf-ocr-status { display: flex; flex: 0 0 auto; align-items: center; gap: 12px; padding: 8px 12px; border-top: 1px solid #d9ddda; background: #f8f9f8; color: #59615c; font-size: 11px; }
+.pdf-ocr-status > span { min-width: 0; flex: 1; }
+.pdf-ocr-progress-track { position: relative; width: min(260px, 35vw); height: 6px; flex: 0 0 auto; overflow: hidden; border-radius: 999px; background: #e1e5e2; }
+.pdf-ocr-progress-track i { display: block; width: 0; height: 100%; border-radius: inherit; background: #66726b; transition: width 0.2s ease; }
+.pdf-ocr-progress-track.indeterminate i { width: 38%; animation: pdf-ocr-progress 1.15s ease-in-out infinite; }
+@keyframes pdf-ocr-progress { from { transform: translateX(-110%); } to { transform: translateX(285%); } }
 .pdf-ocr-status.error-state { background: #fff3f3; color: #8e3030; }
 .url-preview { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; background: #eceeed; }
 .url-preview-toolbar { display: flex; min-height: 48px; flex: 0 0 auto; align-items: center; gap: 10px; padding: 7px 12px; border-bottom: 1px solid #d9ddda; background: #f8f9f8; }

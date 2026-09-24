@@ -1,5 +1,5 @@
 import type { Context } from '@deepseek-ai/cordis'
-import { ChevronLeft, ChevronRight, Download, ExternalLink, RotateCw, ScanText, Square, ZoomIn, ZoomOut } from 'lucide-react'
+import { ChevronLeft, ChevronRight, CloudUpload, Download, ExternalLink, RotateCw, ScanText, Square, ZoomIn, ZoomOut } from 'lucide-react'
 import { Fragment, useEffect, useLayoutEffect, useRef, useState, type JSX, type ReactNode } from 'react'
 import { Document, Page, pdfjs } from 'react-pdf'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
@@ -9,6 +9,7 @@ import 'react-pdf/dist/Page/TextLayer.css'
 import type {} from '@tiggyknowledge/client-connection'
 import type { DocumentPreviewRendererProps } from '@tiggyknowledge/client-runtime'
 import type {} from '@tiggyknowledge/client-runtime'
+import type { KnowledgeDocumentPreview, MineruSettings } from '@tiggyknowledge/contracts'
 
 export const inject = ['clientApp', 'connection']
 
@@ -46,9 +47,11 @@ function highlightedText(content: string, location: string | undefined, query: s
 
 interface PdfDocumentPreviewProps extends DocumentPreviewRendererProps {
   saveOcr: (documentId: string, pages: string[]) => Promise<void>
+  loadMineru: () => Promise<MineruSettings | undefined>
+  runMineruOcr: (documentId: string) => Promise<KnowledgeDocumentPreview>
 }
 
-function PdfDocumentPreview({ contentUrl, preview, targetLocation, targetQuery, saveOcr }: PdfDocumentPreviewProps): JSX.Element {
+function PdfDocumentPreview({ contentUrl, preview, targetLocation, targetQuery, saveOcr, loadMineru, runMineruOcr }: PdfDocumentPreviewProps): JSX.Element {
   const stageRef = useRef<HTMLDivElement>(null)
   const ocrWorkerRef = useRef<Awaited<ReturnType<typeof createWorker>>>()
   const ocrCancelledRef = useRef(false)
@@ -62,8 +65,21 @@ function PdfDocumentPreview({ contentUrl, preview, targetLocation, targetQuery, 
   const [loadError, setLoadError] = useState<string>()
   const [ocrRunning, setOcrRunning] = useState(false)
   const [ocrProgress, setOcrProgress] = useState('')
+  const [ocrPercent, setOcrPercent] = useState<number>()
   const [ocrError, setOcrError] = useState<string>()
   const [ocrText, setOcrText] = useState<string>()
+  const [mineru, setMineru] = useState<MineruSettings>()
+  const [mineruRunning, setMineruRunning] = useState(false)
+
+  useEffect(() => {
+    let active = true
+    void loadMineru().then(settings => {
+      if (active) setMineru(settings)
+    }).catch(() => undefined)
+    return () => {
+      active = false
+    }
+  }, [])
 
   useLayoutEffect(() => {
     if (mode !== 'page') return
@@ -97,14 +113,17 @@ function PdfDocumentPreview({ contentUrl, preview, targetLocation, targetQuery, 
     if (!window.confirm(`将在本机逐页识别文字，并用结果重建检索索引。首次使用需要下载中文 OCR 语言数据。${warning}`)) return
     setOcrRunning(true)
     setOcrError(undefined)
+    setOcrPercent(undefined)
     setOcrProgress('正在加载中文 OCR 模型…')
     ocrCancelledRef.current = false
     const pages: string[] = []
+    let recognizingPage = 0
     try {
       const worker = await createWorker('chi_sim+eng', 1, {
         logger(message) {
           if (message.status === 'recognizing text') {
             setOcrProgress(current => current.replace(/\s·\s\d+%$/, '') + ` · ${Math.round(message.progress * 100)}%`)
+            setOcrPercent(Math.round(((recognizingPage - 1 + message.progress) / pagesToRead) * 100))
           }
         },
       })
@@ -112,6 +131,8 @@ function PdfDocumentPreview({ contentUrl, preview, targetLocation, targetQuery, 
       for (let number = 1; number <= pagesToRead; number += 1) {
         if (ocrCancelledRef.current) throw new Error('OCR 已取消')
         setOcrProgress(`正在识别第 ${number} / ${pagesToRead} 页`)
+        recognizingPage = number
+        setOcrPercent(Math.round(((number - 1) / pagesToRead) * 100))
         const page = await pdfDocument.getPage(number)
         const viewport = page.getViewport({ scale: 2 })
         const canvas = document.createElement('canvas')
@@ -122,12 +143,15 @@ function PdfDocumentPreview({ contentUrl, preview, targetLocation, targetQuery, 
         await page.render({ canvas, canvasContext: context, viewport }).promise
         const result = await worker.recognize(canvas)
         pages.push(result.data.text.trim())
+        setOcrPercent(Math.round((number / pagesToRead) * 100))
         page.cleanup()
       }
       setOcrProgress('正在重建检索索引…')
+      setOcrPercent(99)
       await saveOcr(preview.document.id, pages)
       setOcrText(pages.map((text, index) => `第 ${index + 1} 页\n\n${text}`).join('\n\n'))
       setMode('text')
+      setOcrPercent(100)
       setOcrProgress(`OCR 完成，共识别 ${pagesToRead} 页`)
     } catch (error) {
       setOcrError(error instanceof Error ? error.message : 'OCR 识别失败')
@@ -142,6 +166,26 @@ function PdfDocumentPreview({ contentUrl, preview, targetLocation, targetQuery, 
     ocrCancelledRef.current = true
     setOcrProgress('正在取消 OCR…')
     void ocrWorkerRef.current?.terminate()
+  }
+
+  const runMineru = async (): Promise<void> => {
+    if (mineruRunning || mineru?.enabled !== true || mineru.apiKeyConfigured !== true) return
+    if (!window.confirm('将把当前 PDF 上传到 MinerU 进行云端 OCR，并用识别结果重建检索索引。是否继续？')) return
+    setMineruRunning(true)
+    setOcrError(undefined)
+    setOcrPercent(undefined)
+    setOcrProgress('正在上传 PDF 到 MinerU…')
+    try {
+      const freshPreview = await runMineruOcr(preview.document.id)
+      setOcrText(freshPreview.content)
+      setMode('text')
+      setOcrPercent(100)
+      setOcrProgress(`MinerU OCR 完成${freshPreview.pageCount === undefined ? '' : `，共识别 ${freshPreview.pageCount} 页`}`)
+    } catch (error) {
+      setOcrError(error instanceof Error ? error.message : 'MinerU OCR 失败')
+    } finally {
+      setMineruRunning(false)
+    }
   }
 
   return (
@@ -159,14 +203,25 @@ function PdfDocumentPreview({ contentUrl, preview, targetLocation, targetQuery, 
               <button type="button" title="下一页" disabled={pageCount === 0 || pageNumber >= pageCount} onClick={() => moveToPage(pageNumber + 1)}><ChevronRight size={16} /></button>
             </div>
             <div className="pdf-zoom-control">
-              <button type="button" title="缩小" disabled={zoom <= 0.7} onClick={() => setZoom(value => Math.max(0.7, Number((value - 0.1).toFixed(1))))}><ZoomOut size={16} /></button>
+              <button type="button" title="缩小" disabled={zoom <= 0.3} onClick={() => setZoom(value => Math.max(0.3, Number((value - 0.1).toFixed(1))))}><ZoomOut size={16} /></button>
               <button className="pdf-zoom-value" type="button" title="恢复原始缩放" onClick={() => setZoom(1)}>{Math.round(zoom * 100)}%</button>
               <button type="button" title="放大" disabled={zoom >= 2} onClick={() => setZoom(value => Math.min(2, Number((value + 0.1).toFixed(1))))}><ZoomIn size={16} /></button>
               <button type="button" title="顺时针旋转" onClick={() => setRotation(value => (value + 90) % 360)}><RotateCw size={16} /></button>
             </div>
           </>
         )}
-        <button className="pdf-ocr-button" type="button" disabled={pdfDocument === undefined} onClick={() => ocrRunning ? cancelOcr() : void runOcr()}>
+        {mineru?.enabled === true && (
+          <button
+            className="pdf-ocr-button"
+            type="button"
+            disabled={pdfDocument === undefined || mineruRunning || ocrRunning || !mineru.apiKeyConfigured}
+            title={mineru.apiKeyConfigured ? '上传到 MinerU 进行精准解析' : '请先在设置中配置 MinerU API Token'}
+            onClick={() => void runMineru()}
+          >
+            <CloudUpload size={15} />{mineruRunning ? 'MinerU 识别中…' : 'MinerU OCR'}
+          </button>
+        )}
+        <button className="pdf-ocr-button" type="button" disabled={pdfDocument === undefined || mineruRunning} onClick={() => ocrRunning ? cancelOcr() : void runOcr()}>
           {ocrRunning ? <Square size={15} /> : <ScanText size={15} />}{ocrRunning ? '取消 OCR' : 'OCR 识别'}
         </button>
         <div className="pdf-file-actions">
@@ -211,7 +266,23 @@ function PdfDocumentPreview({ contentUrl, preview, targetLocation, targetQuery, 
       ) : (
         <pre className="document-content pdf-text-content">{highlightedText(ocrText ?? preview.content, targetLocation, targetQuery)}</pre>
       )}
-      {(ocrProgress !== '' || ocrError !== undefined) && <div className={`pdf-ocr-status${ocrError === undefined ? '' : ' error-state'}`}>{ocrError ?? ocrProgress}</div>}
+      {(ocrProgress !== '' || ocrError !== undefined) && (
+        <div className={`pdf-ocr-status${ocrError === undefined ? '' : ' error-state'}`}>
+          <span>{ocrError ?? ocrProgress}</span>
+          {ocrError === undefined && (ocrRunning || mineruRunning || ocrPercent !== undefined) && (
+            <div
+              className={`pdf-ocr-progress-track${ocrPercent === undefined ? ' indeterminate' : ''}`}
+              role="progressbar"
+              aria-label="OCR 识别进度"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              {...(ocrPercent === undefined ? {} : { 'aria-valuenow': ocrPercent })}
+            >
+              <i style={ocrPercent === undefined ? undefined : { width: `${ocrPercent}%` }} />
+            </div>
+          )}
+        </div>
+      )}
       {mode === 'text' && preview.truncated && <div className="preview-truncated">检索和 Wiki 只使用已提取的文本（最多前 500 页或约 200 万字），页面预览仍可翻阅全文。</div>}
     </section>
   )
@@ -221,6 +292,9 @@ export function apply(ctx: Context): void {
   ctx.effect(() => ctx.clientApp.registerDocumentPreviewRenderer({
     component: props => <PdfDocumentPreview {...props} saveOcr={async (documentId, pages) => {
       await ctx.connection.updatePdfOcr(documentId, { pages })
+    }} loadMineru={async () => (await ctx.connection.system()).mineru} runMineruOcr={async documentId => {
+      await ctx.connection.runMineruPdfOcr(documentId)
+      return await ctx.connection.documentPreview(documentId)
     }} />,
     format: 'pdf',
   }), 'client-preview-pdf: register renderer')

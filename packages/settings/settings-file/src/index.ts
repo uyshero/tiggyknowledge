@@ -10,9 +10,12 @@ import type {
   LlmIntegrationSettings,
   LlmProviderModel,
   LlmProviderSettings,
+  MineruModelVersion,
+  MineruSettings,
   SettingsSnapshot,
   UpdateDshIntegrationSettingsInput,
   UpdateLlmIntegrationSettingsInput,
+  UpdateMineruSettingsInput,
 } from '@tiggyknowledge/contracts'
 import { contributeSurface } from '@tiggyknowledge/plugin-surface'
 import {
@@ -49,6 +52,14 @@ const DEFAULT_SETTINGS: Record<string, unknown> = {
   llmIntegration: {
     providers: [],
   } satisfies StoredLlmIntegration,
+  mineru: {
+    enabled: false,
+    baseUrl: 'https://mineru.net',
+    modelVersion: 'vlm',
+    language: 'ch',
+    enableTable: true,
+    enableFormula: true,
+  } satisfies StoredMineruSettings,
 }
 
 interface StoredDshIntegrationSettings extends DshIntegrationSettings {
@@ -72,7 +83,17 @@ interface StoredLlmIntegration {
   transcriptionModelId?: string
 }
 
+interface StoredMineruSettings {
+  enabled: boolean
+  baseUrl: string
+  modelVersion: MineruModelVersion
+  language: string
+  enableTable: boolean
+  enableFormula: boolean
+}
+
 export type LlmCredentialLookup = (providerId: string) => { configured: boolean, preview?: string }
+export type MineruCredentialLookup = () => { configured: boolean, preview?: string }
 
 export class FileSettings extends Service {
   private readonly filename: string
@@ -140,6 +161,31 @@ export class FileSettings extends Service {
     return this.snapshot()
   }
 
+  mineru(lookup: MineruCredentialLookup = () => ({ configured: false })): MineruSettings {
+    const stored = normalizeMineruSettings(this.values.mineru)
+    const credential = lookup()
+    return {
+      ...stored,
+      apiKeyConfigured: credential.configured,
+      ...(credential.preview === undefined ? {} : { apiKeyPreview: credential.preview }),
+    }
+  }
+
+  updateMineru(input: UpdateMineruSettingsInput): SettingsSnapshot {
+    const current = normalizeMineruSettings(this.values.mineru)
+    const next: StoredMineruSettings = {
+      enabled: input.enabled === undefined ? current.enabled : normalizeBoolean(input.enabled, 'MinerU 启用开关'),
+      baseUrl: input.baseUrl === undefined ? current.baseUrl : normalizeMineruBaseUrl(input.baseUrl),
+      modelVersion: input.modelVersion === undefined ? current.modelVersion : validateMineruModel(input.modelVersion),
+      language: input.language === undefined ? current.language : normalizeMineruLanguage(input.language),
+      enableTable: input.enableTable === undefined ? current.enableTable : normalizeBoolean(input.enableTable, '表格识别开关'),
+      enableFormula: input.enableFormula === undefined ? current.enableFormula : normalizeBoolean(input.enableFormula, '公式识别开关'),
+    }
+    this.values = { ...this.values, mineru: next }
+    this.write(this.values)
+    return this.snapshot()
+  }
+
   generateDshIntegrationAccessKey(): GenerateDshIntegrationAccessKeyResult {
     const accessKey = `tk_${randomBytes(32).toString('base64url')}`
     const current = normalizeDshIntegration(this.values.dshIntegration)
@@ -179,6 +225,7 @@ export class FileSettings extends Service {
       ...values,
       dshIntegration: normalizeDshIntegration(values.dshIntegration),
       llmIntegration: normalizeLlmIntegration(values.llmIntegration),
+      mineru: normalizeMineruSettings(values.mineru),
     }
   }
 
@@ -207,6 +254,53 @@ function normalizeDshIntegration(value: unknown): StoredDshIntegrationSettings {
   if (accessKey !== undefined) settings.accessKey = accessKey
   if (typeof source.accessKeyHash === 'string' && source.accessKeyHash.length > 0) settings.accessKeyHash = source.accessKeyHash
   return settings
+}
+
+function normalizeMineruSettings(value: unknown): StoredMineruSettings {
+  const source = typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : {}
+  return {
+    enabled: typeof source.enabled === 'boolean' ? source.enabled : false,
+    baseUrl: normalizeMineruBaseUrl(source.baseUrl),
+    modelVersion: normalizeMineruModel(source.modelVersion),
+    language: normalizeMineruLanguage(source.language),
+    enableTable: typeof source.enableTable === 'boolean' ? source.enableTable : true,
+    enableFormula: typeof source.enableFormula === 'boolean' ? source.enableFormula : true,
+  }
+}
+
+function normalizeMineruBaseUrl(value: unknown): string {
+  const text = typeof value === 'string' ? value.trim().replace(/\/+$/, '') : 'https://mineru.net'
+  if (text.length === 0 || text.length > 500) throw new RangeError('MinerU 接口地址长度无效')
+  let url: URL
+  try {
+    url = new URL(text)
+  } catch {
+    throw new RangeError('MinerU 接口地址必须是合法 URL')
+  }
+  if (url.protocol !== 'https:' && url.hostname !== '127.0.0.1' && url.hostname !== 'localhost') {
+    throw new RangeError('MinerU 接口地址必须使用 HTTPS')
+  }
+  return text
+}
+
+function normalizeMineruModel(value: unknown): MineruModelVersion {
+  return value === 'pipeline' ? 'pipeline' : 'vlm'
+}
+
+function validateMineruModel(value: unknown): MineruModelVersion {
+  if (value !== 'pipeline' && value !== 'vlm') throw new RangeError('MinerU 解析模型无效')
+  return value
+}
+
+function normalizeMineruLanguage(value: unknown): string {
+  const text = typeof value === 'string' ? value.trim() : 'ch'
+  if (!/^[a-z_]{2,32}$/i.test(text)) throw new RangeError('MinerU 语言代码无效')
+  return text
+}
+
+function normalizeBoolean(value: unknown, label: string): boolean {
+  if (typeof value !== 'boolean') throw new RangeError(`${label}必须是布尔值`)
+  return value
 }
 
 function publicDshIntegration(value: unknown): DshIntegrationSettings {

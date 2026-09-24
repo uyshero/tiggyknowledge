@@ -135,6 +135,9 @@ importers:
       '@tiggyknowledge/metadata-sqlite':
         specifier: workspace:^
         version: link:../../packages/storage/metadata-sqlite
+      '@tiggyknowledge/mineru-api':
+        specifier: workspace:^
+        version: link:../../packages/host/mineru-api
       '@tiggyknowledge/note-creator':
         specifier: workspace:^
         version: link:../../packages/host/note-creator
@@ -595,6 +598,31 @@ importers:
         version: 18.3.31
 
   packages/client/settings-llm:
+    dependencies:
+      lucide-react:
+        specifier: ^0.468.0
+        version: 0.468.0(react@18.2.0)
+      react:
+        specifier: ^18.2.0
+        version: 18.2.0
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@tiggyknowledge/client-connection':
+        specifier: workspace:^
+        version: link:../connection
+      '@tiggyknowledge/client-runtime':
+        specifier: workspace:^
+        version: link:../runtime
+      '@tiggyknowledge/contracts':
+        specifier: workspace:^
+        version: link:../../core/contracts
+      '@types/react':
+        specifier: ~18.3.1
+        version: 18.3.31
+
+  packages/client/settings-mineru:
     dependencies:
       lucide-react:
         specifier: ^0.468.0
@@ -1324,6 +1352,37 @@ importers:
       '@tiggyknowledge/wiki-sqlite':
         specifier: workspace:^
         version: link:../../storage/wiki-sqlite
+
+  packages/host/mineru-api:
+    dependencies:
+      fflate:
+        specifier: ^0.8.2
+        version: 0.8.3
+    devDependencies:
+      '@deepseek-ai/cordis':
+        specifier: workspace:^
+        version: link:../../../vendor/cordis
+      '@tiggyknowledge/contracts':
+        specifier: workspace:^
+        version: link:../../core/contracts
+      '@tiggyknowledge/documents':
+        specifier: workspace:^
+        version: link:../documents
+      '@tiggyknowledge/http-router':
+        specifier: workspace:^
+        version: link:../http-router
+      '@tiggyknowledge/llm-credentials':
+        specifier: workspace:^
+        version: link:../../settings/llm-credentials
+      '@tiggyknowledge/plugin-surface':
+        specifier: workspace:^
+        version: link:../plugin-surface
+      '@tiggyknowledge/producer-pdf':
+        specifier: workspace:^
+        version: link:../producer-pdf
+      '@tiggyknowledge/settings-file':
+        specifier: workspace:^
+        version: link:../../settings/settings-file
 
   packages/host/note-creator:
     devDependencies:

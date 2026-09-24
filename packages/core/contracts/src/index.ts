@@ -461,6 +461,39 @@ export interface DshIntegrationSettings {
   accessKey?: DshIntegrationAccessKeyMetadata
 }
 
+export type MineruModelVersion = 'pipeline' | 'vlm'
+
+export interface MineruSettings {
+  enabled: boolean
+  baseUrl: string
+  modelVersion: MineruModelVersion
+  language: string
+  enableTable: boolean
+  enableFormula: boolean
+  apiKeyConfigured: boolean
+  apiKeyPreview?: string
+}
+
+export interface UpdateMineruSettingsInput {
+  enabled?: boolean
+  baseUrl?: string
+  modelVersion?: MineruModelVersion
+  language?: string
+  enableTable?: boolean
+  enableFormula?: boolean
+}
+
+export interface SetMineruApiKeyInput {
+  apiKey: string
+}
+
+export interface MineruPdfOcrResult {
+  document: KnowledgeDocument
+  taskId: string
+  pageCount: number
+  truncated: boolean
+}
+
 export const DEFAULT_LLM_BASE_URL = 'https://api.openai.com/v1'
 export const DEFAULT_LLM_REQUEST_TIMEOUT_MS = 120_000
 export const DEFAULT_LLM_MAX_INPUT_TOKENS = 32_000
@@ -1114,6 +1147,7 @@ export interface SystemSnapshot {
   catalog: CatalogSummary
   settings: SettingsSnapshot
   llm?: LlmIntegrationSettings
+  mineru?: MineruSettings
   semanticSearch: SemanticCapabilitySnapshot
   hostPlugins: PluginInventoryEntry[]
   clientBoot: ClientBootManifest

@@ -43,7 +43,10 @@ import type {
   LibraryChatStreamEvent,
   CancelLibraryChatResult,
   LlmIntegrationSettings,
+  MineruPdfOcrResult,
+  MineruSettings,
   SendLibraryChatMessageInput,
+  SetMineruApiKeyInput,
   SetLlmApiKeyInput,
   StartWikiGenerationInput,
   SystemSnapshot,
@@ -54,6 +57,7 @@ import type {
   TestLlmConnectionInput,
   TestLlmConnectionResult,
   UpdateLlmIntegrationSettingsInput,
+  UpdateMineruSettingsInput,
   UpdateWikiPageInput,
   UpdateWikiFolderInput,
   UpdateWikiIssueInput,
@@ -227,6 +231,24 @@ export class ConnectionService extends Service {
 
   async setLlmApiKey(input: SetLlmApiKeyInput, signal?: AbortSignal): Promise<LlmIntegrationSettings> {
     return await this.request<LlmIntegrationSettings>('/api/settings/llm/api-key', {
+      body: JSON.stringify(input),
+      headers: { 'content-type': 'application/json' },
+      method: 'PUT',
+      ...(signal === undefined ? {} : { signal }),
+    })
+  }
+
+  async updateMineruSettings(input: UpdateMineruSettingsInput, signal?: AbortSignal): Promise<MineruSettings> {
+    return await this.request<MineruSettings>('/api/settings/mineru', {
+      body: JSON.stringify(input),
+      headers: { 'content-type': 'application/json' },
+      method: 'PUT',
+      ...(signal === undefined ? {} : { signal }),
+    })
+  }
+
+  async setMineruApiKey(input: SetMineruApiKeyInput, signal?: AbortSignal): Promise<MineruSettings> {
+    return await this.request<MineruSettings>('/api/settings/mineru/api-key', {
       body: JSON.stringify(input),
       headers: { 'content-type': 'application/json' },
       method: 'PUT',
@@ -639,6 +661,13 @@ export class ConnectionService extends Service {
       body: JSON.stringify(input),
       headers: { 'content-type': 'application/json' },
       method: 'PUT',
+      ...(signal === undefined ? {} : { signal }),
+    })
+  }
+
+  async runMineruPdfOcr(documentId: string, signal?: AbortSignal): Promise<MineruPdfOcrResult> {
+    return await this.request<MineruPdfOcrResult>(`/api/documents/${encodeURIComponent(documentId)}/mineru-ocr`, {
+      method: 'POST',
       ...(signal === undefined ? {} : { signal }),
     })
   }

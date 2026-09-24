@@ -12,6 +12,7 @@
     { "path": "./packages/client/settings-config" },
     { "path": "./packages/client/settings-dsh-integration" },
     { "path": "./packages/client/settings-llm" },
+    { "path": "./packages/client/settings-mineru" },
     { "path": "./packages/client/settings-plugins" },
     { "path": "./packages/client/preview-pdf" },
     { "path": "./packages/client/preview-url" },

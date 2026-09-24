@@ -115,6 +115,9 @@
     - id: llm-api
       name: '@tiggyknowledge/llm-api'
 
+    - id: mineru-api
+      name: '@tiggyknowledge/mineru-api'
+
     - id: library-chat
       name: '@tiggyknowledge/library-chat'
 

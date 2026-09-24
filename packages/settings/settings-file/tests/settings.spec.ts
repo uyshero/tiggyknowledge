@@ -14,6 +14,34 @@ afterEach(() => {
 })
 
 describe('LLM integration settings', () => {
+  it('keeps MinerU disabled by default and stores only non-secret options', async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), 'tiggyknowledge-settings-mineru-'))
+    directories.push(dataDir)
+    const filename = join(dataDir, 'settings.yaml')
+    const ctx = new Context()
+    try {
+      await ctx.plugin(FileSettings, { path: filename })
+      expect(ctx.settings.mineru()).toMatchObject({
+        enabled: false,
+        baseUrl: 'https://mineru.net',
+        modelVersion: 'vlm',
+        language: 'ch',
+        apiKeyConfigured: false,
+      })
+      ctx.settings.updateMineru({ enabled: true, modelVersion: 'pipeline', enableTable: false })
+      expect(ctx.settings.mineru(() => ({ configured: true, preview: 'sk-min…test' }))).toMatchObject({
+        enabled: true,
+        modelVersion: 'pipeline',
+        enableTable: false,
+        apiKeyConfigured: true,
+        apiKeyPreview: 'sk-min…test',
+      })
+      expect(readFileSync(filename, 'utf8')).not.toContain('sk-min')
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  })
+
   it('migrates a legacy single-model configuration into a default provider', async () => {
     const dataDir = mkdtempSync(join(tmpdir(), 'tiggyknowledge-settings-legacy-'))
     directories.push(dataDir)
