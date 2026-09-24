@@ -59,7 +59,9 @@ export class PdfProducer extends Service {
       const extracted = await this.extract(fileName, bytes)
       return {
         title: extracted.title,
-        body: extracted.pages.join('\n\f\n'),
+        body: extracted.pages.some(page => page.trim().length > 0)
+          ? extracted.pages.join('\n\f\n')
+          : '扫描 PDF，尚未进行 OCR 文字识别。',
         sourceType: 'pdf',
       }
     }), 'producer-pdf: register')
@@ -90,9 +92,6 @@ export class PdfProducer extends Service {
         }
         pages.push(extracted)
         characters += extracted.length
-      }
-      if (pages.every(page => page.trim().length === 0)) {
-        throw new Error('PDF 没有可提取的文本，扫描件需要 OCR 插件')
       }
       return { title, pages, pageCount: document.numPages, truncated }
     } catch (error) {

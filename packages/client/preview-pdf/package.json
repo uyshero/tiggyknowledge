@@ -5,19 +5,27 @@
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/types/index.d.ts",
-  "exports": { ".": { "types": "./lib/types/index.d.ts", "default": "./lib/index.js" } },
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    }
+  },
   "dependencies": {
     "lucide-react": "^0.468.0",
     "pdfjs-dist": "5.4.296",
     "react": "^18.2.0",
-    "react-pdf": "^10.5.0"
+    "react-pdf": "^10.5.0",
+    "tesseract.js": "^7.0.0"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "workspace:^",
+    "@tiggyknowledge/client-connection": "workspace:^",
     "@tiggyknowledge/client-runtime": "workspace:^"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "workspace:^",
+    "@tiggyknowledge/client-connection": "workspace:^",
     "@tiggyknowledge/client-runtime": "workspace:^",
     "@tiggyknowledge/contracts": "workspace:^",
     "@types/react": "~18.3.1"

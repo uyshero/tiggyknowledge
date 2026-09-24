@@ -43,6 +43,17 @@ describe('LLM Wiki generation', () => {
           outputTokens: 15,
         }
       })
+      .mockResolvedValue({
+        content: JSON.stringify({
+          summary: '手动词条的简明摘要。',
+          purpose: '帮助理解手动词条。',
+          questions: ['它是什么？'],
+          sectionTitle: '解释',
+          body: '这是 AI 补充并等待用户确认的解释草稿。',
+        }),
+        inputTokens: 8,
+        outputTokens: 12,
+      })
     delete process.env.TIGGYKNOWLEDGE_LLM_API_KEY
     ctx.provide('secretCodec', {
       encrypt: value => Buffer.from(value).toString('base64'),
@@ -150,7 +161,7 @@ describe('LLM Wiki generation', () => {
       const topic = ctx.llmWiki.pages().find(page => page.pageType !== 'index')
       expect(topic).toMatchObject({ folderId: expect.any(String), status: 'draft' })
       expect(ctx.llmWiki.page('index')).toMatchObject({ pageType: 'index', status: 'published' })
-      expect(ctx.llmWiki.page('index').sections[0]?.body).toContain('## Wiki 测试库')
+      expect(ctx.llmWiki.page('index').sections[0]?.body).toContain('## 专题')
       expect(ctx.llmWiki.page('index').sections[0]?.body).toContain(topic?.title)
       expect(ctx.llmWiki.page(topic!.slug)).toMatchObject({
         status: 'draft',
@@ -165,8 +176,29 @@ describe('LLM Wiki generation', () => {
       })
       expect(ctx.llmWiki.publishPage(topic!.id, topic!.version)).toMatchObject({ status: 'published' })
       expect(ctx.llmWiki.status()).toMatchObject({ state: 'ready', reviews: [] })
+      const category = ctx.llmWiki.createFolder({ name: '人工分类' })
+      expect(ctx.llmWiki.updateFolder(category.id, { name: '人工维护' })).toMatchObject({ name: '人工维护', path: '人工维护' })
+      const assisted = await ctx.llmWiki.assistPage({ title: '手动词条', pageType: 'event', notes: '用于测试' })
+      expect(assisted).toMatchObject({
+        summary: '手动词条的简明摘要。',
+        sectionTitle: '解释',
+        body: expect.stringContaining('AI 补充'),
+      })
+      const manual = ctx.llmWiki.createPage({
+        title: '手动词条',
+        pageType: 'event',
+        folderId: category.id,
+        summary: assisted.summary,
+        purpose: assisted.purpose,
+        questions: assisted.questions,
+        sectionTitle: assisted.sectionTitle,
+        body: assisted.body,
+      })
+      expect(manual).toMatchObject({ title: '手动词条', pageType: 'event', folderId: category.id, state: 'locked', lastEditSource: 'user' })
+      ctx.llmWiki.deleteFolder(category.id)
+      expect(ctx.llmWiki.page(manual.id).folderId).toBeUndefined()
       expect(() => ctx.llmWiki.start({ documentId: document.id })).toThrow('该文章对应的词条已是最新')
-      expect(complete).toHaveBeenCalledTimes(3)
+      expect(complete).toHaveBeenCalledTimes(4)
     } finally {
       await ctx.fiber.dispose()
       rmSync(dataDir, { recursive: true, force: true })

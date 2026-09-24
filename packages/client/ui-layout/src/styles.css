@@ -1,8 +1,11 @@
 :root {
   color: #202321;
   background: #f7f8f7;
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", "Microsoft YaHei", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 15px;
   font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
 }
 
 * { box-sizing: border-box; }
@@ -226,7 +229,7 @@ button:focus-visible { outline: 2px solid #737a76; outline-offset: 2px; }
 .search-history-chip { border: 1px solid #d8ddda; border-radius: 999px; background: #ffffff; padding: 6px 10px; color: #505753; font-size: 11px; cursor: pointer; }
 .search-history-chip:hover { background: #f1f3f2; }
 
-.documents-page { display: flex; min-height: 100%; flex-direction: column; }
+.documents-page { display: flex; height: 100%; min-height: 0; flex-direction: column; overflow: hidden; }
 .documents-header { flex: 0 0 auto; }
 .documents-title { display: flex; min-width: 0; align-items: center; gap: 10px; }
 .documents-title > div { min-width: 0; }
@@ -241,8 +244,8 @@ button:focus-visible { outline: 2px solid #737a76; outline-offset: 2px; }
 .documents-query { display: flex; width: 150px; height: 32px; align-items: center; gap: 6px !important; padding: 0 9px; border: 1px solid #d5dad7; border-radius: 5px; background: #fff; color: #737a76; }
 .documents-query:focus-within { border-color: #747b77; box-shadow: 0 0 0 2px rgb(70 76 72 / 10%); }
 .documents-query input { width: 100%; min-width: 0; border: 0; outline: 0; background: transparent; color: #252927; font-size: 11px; }
-.documents-workbench { display: grid; min-height: 540px; flex: 1 1 auto; grid-template-columns: minmax(300px, 360px) minmax(0, 1fr); }
-.document-list-pane { min-width: 0; border-right: 1px solid #e4e7e5; background: #fafbfa; }
+.documents-workbench { display: grid; min-height: 0; flex: 1 1 auto; grid-template-columns: minmax(300px, 360px) minmax(0, 1fr); overflow: hidden; }
+.document-list-pane { min-width: 0; min-height: 0; overflow: auto; border-right: 1px solid #e4e7e5; background: #fafbfa; }
 .document-list-heading { display: flex; min-height: 40px; align-items: center; justify-content: space-between; gap: 12px; padding: 0 13px; border-bottom: 1px solid #e4e7e5; color: #858c87; font-size: 10px; }
 .document-list-heading label { display: flex; align-items: center; gap: 7px; cursor: pointer; }
 .document-list-heading input, .document-row > input { width: 14px; height: 14px; margin: 0; accent-color: #555d58; }
@@ -349,6 +352,8 @@ button:focus-visible { outline: 2px solid #737a76; outline-offset: 2px; }
 .pdf-page-control label { display: flex; height: 30px; align-items: center; gap: 4px; padding: 0 8px; border: 1px solid #d6dad8; border-radius: 5px; background: #fff; color: #737a76; font-size: 11px; white-space: nowrap; }
 .pdf-page-control input { width: 34px; border: 0; outline: 0; background: transparent; color: #292e2b; font-size: 11px; text-align: center; }
 .pdf-zoom-control .pdf-zoom-value { width: 48px; color: #4f5652; font-size: 10px; }
+.pdf-ocr-button { display: inline-flex; height: 30px; align-items: center; gap: 6px; border: 1px solid #d6dad8; border-radius: 5px; background: #fff; padding: 0 9px; color: #4f5652; font-size: 11px; cursor: pointer; }
+.pdf-ocr-button:hover:not(:disabled) { border-color: #b9bfbb; background: #f0f2f1; }
 .pdf-file-actions { margin-left: auto; }
 .pdf-page-stage { min-width: 0; min-height: 420px; flex: 1; overflow: auto; padding: 24px; text-align: center; }
 .pdf-page-stage .react-pdf__Document { display: inline-block; min-width: min-content; text-align: left; }
@@ -357,6 +362,8 @@ button:focus-visible { outline: 2px solid #737a76; outline-offset: 2px; }
 .pdf-render-state { display: flex; width: min(460px, calc(100vw - 110px)); min-height: 320px; align-items: center; justify-content: center; flex-direction: column; gap: 7px; color: #737a76; font-size: 12px; }
 .pdf-render-state.error-state { color: #8e3030; }
 .pdf-text-content { background: #fff; }
+.pdf-ocr-status { flex: 0 0 auto; padding: 8px 12px; border-top: 1px solid #d9ddda; background: #f8f9f8; color: #59615c; font-size: 11px; }
+.pdf-ocr-status.error-state { background: #fff3f3; color: #8e3030; }
 .url-preview { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; overflow: hidden; background: #eceeed; }
 .url-preview-toolbar { display: flex; min-height: 48px; flex: 0 0 auto; align-items: center; gap: 10px; padding: 7px 12px; border-bottom: 1px solid #d9ddda; background: #f8f9f8; }
 .url-preview-address { min-width: 0; flex: 1; overflow: hidden; color: #5c635f; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }

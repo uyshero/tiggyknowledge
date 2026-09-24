@@ -1,5 +1,5 @@
 import type { Context } from '@deepseek-ai/cordis'
-import { ChevronRight, FileEdit, FolderClosed, History, Library, Plus, RefreshCw, Search, Settings, Square, Undo2, Unlock, X } from 'lucide-react'
+import { ChevronRight, FileEdit, FolderClosed, FolderPlus, History, Library, Pencil, Plus, RefreshCw, Search, Settings, Sparkles, Square, Trash2, Undo2, Unlock, X } from 'lucide-react'
 import { Fragment, useCallback, useEffect, useMemo, useState, useSyncExternalStore, type JSX, type ReactNode } from 'react'
 import type {} from '@tiggyknowledge/client-connection'
 import type {} from '@tiggyknowledge/client-runtime'
@@ -250,6 +250,7 @@ function pageTypeLabel(type: WikiPageSummary['pageType']): string {
     policy: '制度',
     procedure: '流程',
     decision: '决策',
+    event: '事件',
     topic: '专题',
     index: '首页',
     synthesis: '综合',
@@ -324,6 +325,7 @@ export function apply(ctx: Context): void {
     const [editAliases, setEditAliases] = useState('')
     const [editPurpose, setEditPurpose] = useState('')
     const [editQuestions, setEditQuestions] = useState('')
+    const [editFolderId, setEditFolderId] = useState('')
     const [editSections, setEditSections] = useState<UpdateWikiPageInput['sections']>([])
     const [saving, setSaving] = useState(false)
     const [unlocking, setUnlocking] = useState(false)
@@ -334,6 +336,22 @@ export function apply(ctx: Context): void {
     const [revertingVersion, setRevertingVersion] = useState<number>()
     const [treeQuery, setTreeQuery] = useState('')
     const [openQueue, setOpenQueue] = useState<'inbox' | 'reviews' | 'skipped'>()
+    const [createPageOpen, setCreatePageOpen] = useState(false)
+    const [createTitle, setCreateTitle] = useState('')
+    const [createType, setCreateType] = useState<WikiPageSummary['pageType']>('concept')
+    const [createFolderId, setCreateFolderId] = useState('')
+    const [createSummary, setCreateSummary] = useState('')
+    const [createPurpose, setCreatePurpose] = useState('')
+    const [createQuestions, setCreateQuestions] = useState('')
+    const [createSectionTitle, setCreateSectionTitle] = useState('说明')
+    const [createBody, setCreateBody] = useState('')
+    const [creatingPage, setCreatingPage] = useState(false)
+    const [assistingPage, setAssistingPage] = useState(false)
+    const [categoriesOpen, setCategoriesOpen] = useState(false)
+    const [newCategoryName, setNewCategoryName] = useState('')
+    const [renamingFolderId, setRenamingFolderId] = useState<string>()
+    const [renameCategoryName, setRenameCategoryName] = useState('')
+    const [categoryBusy, setCategoryBusy] = useState(false)
 
     const loadWorkspace = useCallback(async (signal?: AbortSignal): Promise<void> => {
       const nextStatus = await ctx.connection.wikiStatus(signal)
@@ -344,9 +362,10 @@ export function apply(ctx: Context): void {
       } else {
         setGeneration(nextStatus.lastGeneration)
       }
-      const [nextPages, nextFolders] = nextStatus.pageCount > 0
-        ? await Promise.all([ctx.connection.wikiPages(signal), ctx.connection.wikiFolders(signal)])
-        : [[], []]
+      const [nextPages, nextFolders] = await Promise.all([
+        ctx.connection.wikiPages(signal),
+        ctx.connection.wikiFolders(signal),
+      ])
       setPages(nextPages)
       setFolders(nextFolders)
       const requested = wikiPageId(ctx.clientApp.getSnapshot().pageState)
@@ -490,6 +509,7 @@ export function apply(ctx: Context): void {
       setEditAliases(page.aliases.join('、'))
       setEditPurpose(page.purpose)
       setEditQuestions(page.questions.join('\n'))
+      setEditFolderId(page.folderId ?? '')
       setEditSections(page.sections.map(section => ({ id: section.id, title: section.title, body: section.body })))
       setEditing(true)
     }
@@ -503,6 +523,7 @@ export function apply(ctx: Context): void {
           summary: editSummary.trim(),
           pageType: page.pageType,
           status: page.status === 'draft' ? 'draft' : editStatus,
+          folderId: editFolderId === '' ? null : editFolderId,
           aliases: editAliases.split(/[、,\n]/).map(item => item.trim()).filter(Boolean),
           purpose: editPurpose.trim(),
           questions: editQuestions.split('\n').map(item => item.trim()).filter(Boolean),
@@ -584,6 +605,100 @@ export function apply(ctx: Context): void {
       }
     }
 
+    const createManualPage = async (): Promise<void> => {
+      if (creatingPage || createTitle.trim() === '' || createBody.trim() === '') return
+      setCreatingPage(true)
+      setError(undefined)
+      try {
+        const created = await ctx.connection.createWikiPage({
+          title: createTitle.trim(),
+          pageType: createType,
+          ...(createFolderId === '' ? {} : { folderId: createFolderId }),
+          summary: createSummary.trim(),
+          purpose: createPurpose.trim(),
+          questions: createQuestions.split('\n').map(item => item.trim()).filter(Boolean),
+          sectionTitle: createSectionTitle.trim() || '说明',
+          body: createBody.trim(),
+        })
+        setCreatePageOpen(false)
+        setCreateTitle('')
+        setCreateSummary('')
+        setCreatePurpose('')
+        setCreateQuestions('')
+        setCreateSectionTitle('说明')
+        setCreateBody('')
+        await loadWorkspace()
+        setSelectedPageId(created.id)
+      } catch (reason) {
+        setError(errorMessage(reason, '无法新增 Wiki 词条'))
+      } finally {
+        setCreatingPage(false)
+      }
+    }
+
+    const assistManualPage = async (): Promise<void> => {
+      if (assistingPage || createTitle.trim() === '') return
+      setAssistingPage(true)
+      setError(undefined)
+      try {
+        const draft = await ctx.connection.assistWikiPage({
+          title: createTitle.trim(),
+          pageType: createType,
+          ...(createBody.trim() === '' ? {} : { notes: createBody.trim() }),
+        })
+        setCreateSummary(draft.summary)
+        setCreatePurpose(draft.purpose)
+        setCreateQuestions(draft.questions.join('\n'))
+        setCreateSectionTitle(draft.sectionTitle)
+        setCreateBody(draft.body)
+      } catch (reason) {
+        setError(errorMessage(reason, 'AI 无法补充这个词条'))
+      } finally {
+        setAssistingPage(false)
+      }
+    }
+
+    const createCategory = async (): Promise<void> => {
+      if (categoryBusy || newCategoryName.trim() === '') return
+      setCategoryBusy(true)
+      try {
+        await ctx.connection.createWikiFolder({ name: newCategoryName.trim() })
+        setNewCategoryName('')
+        await loadWorkspace()
+      } catch (reason) {
+        setError(errorMessage(reason, '无法创建分类'))
+      } finally {
+        setCategoryBusy(false)
+      }
+    }
+
+    const renameCategory = async (): Promise<void> => {
+      if (categoryBusy || renamingFolderId === undefined || renameCategoryName.trim() === '') return
+      setCategoryBusy(true)
+      try {
+        await ctx.connection.updateWikiFolder(renamingFolderId, { name: renameCategoryName.trim() })
+        setRenamingFolderId(undefined)
+        await loadWorkspace()
+      } catch (reason) {
+        setError(errorMessage(reason, '无法重命名分类'))
+      } finally {
+        setCategoryBusy(false)
+      }
+    }
+
+    const deleteCategory = async (folder: WikiFolder): Promise<void> => {
+      if (categoryBusy || !window.confirm(`删除分类“${folder.name}”？其中词条会移到“未分组”。`)) return
+      setCategoryBusy(true)
+      try {
+        await ctx.connection.deleteWikiFolder(folder.id)
+        await loadWorkspace()
+      } catch (reason) {
+        setError(errorMessage(reason, '无法删除分类'))
+      } finally {
+        setCategoryBusy(false)
+      }
+    }
+
     const sources = useMemo(() => sourceList(page), [page])
     const visiblePages = useMemo(() => {
       const query = treeQuery.trim().toLowerCase()
@@ -628,6 +743,10 @@ export function apply(ctx: Context): void {
       <div className="page wiki-page">
         <header className="page-header">
           <div><p className="eyebrow">AI 知识整理</p><h1>Wiki</h1></div>
+          <div className="header-actions">
+            <button className="secondary-button" type="button" onClick={() => setCategoriesOpen(true)}><FolderPlus size={15} />管理分类</button>
+            <button className="primary-button" type="button" onClick={() => setCreatePageOpen(true)}><Plus size={15} />新增词条</button>
+          </div>
         </header>
 
         {status !== undefined && (
@@ -800,6 +919,7 @@ export function apply(ctx: Context): void {
                     {page.status !== 'draft' && (
                       <label><span>发布状态</span><select value={editStatus} onChange={event => setEditStatus(event.target.value as WikiPageStatus)}><option value="draft">草稿</option><option value="published">已发布</option><option value="archived">已归档</option></select></label>
                     )}
+                    <label><span>所属分类</span><select value={editFolderId} onChange={event => setEditFolderId(event.target.value)}><option value="">未分组</option>{folders.map(folder => <option key={folder.id} value={folder.id}>{folder.path}</option>)}</select></label>
                     <label><span>别名（逗号分隔）</span><input value={editAliases} onChange={event => setEditAliases(event.target.value)} /></label>
                   </div>
                   {editSections.map((section, sectionIndex) => (
@@ -911,6 +1031,67 @@ export function apply(ctx: Context): void {
           </main>
         )}
         </div>
+
+        {createPageOpen && (
+          <div className="wiki-dialog-backdrop">
+            <section className="wiki-dialog wiki-create-dialog" role="dialog" aria-modal="true" aria-labelledby="wiki-create-title">
+              <header>
+                <div><p className="eyebrow">手动维护</p><h2 id="wiki-create-title">新增 Wiki 词条</h2></div>
+                <button type="button" title="关闭" onClick={() => setCreatePageOpen(false)}><X size={18} /></button>
+              </header>
+              <div className="wiki-manage-form">
+                <label><span>词条名称</span><input autoFocus value={createTitle} onChange={event => setCreateTitle(event.target.value)} placeholder="人物、组织、概念或事件名称" /></label>
+                <div className="wiki-assist-row">
+                  <button className="secondary-button" type="button" disabled={assistingPage || createTitle.trim() === '' || status?.llmConfigured !== true} onClick={() => void assistManualPage()}><Sparkles size={14} />{assistingPage ? 'AI 正在补充...' : 'AI 补充解释'}</button>
+                  <span>AI 会生成可编辑草稿，不会直接创建词条。</span>
+                </div>
+                <div className="wiki-manage-grid">
+                  <label><span>类型</span><select value={createType} onChange={event => setCreateType(event.target.value as WikiPageSummary['pageType'])}>
+                    <option value="entity">人物 / 组织 / 地点</option><option value="concept">概念</option><option value="glossary">术语</option><option value="project">项目 / 产品</option><option value="policy">制度</option><option value="procedure">流程</option><option value="decision">决策</option><option value="event">事件</option><option value="topic">专题</option>
+                  </select></label>
+                  <label><span>分类</span><select value={createFolderId} onChange={event => setCreateFolderId(event.target.value)}><option value="">未分组</option>{folders.map(folder => <option key={folder.id} value={folder.id}>{folder.path}</option>)}</select></label>
+                </div>
+                <label><span>摘要</span><textarea rows={3} value={createSummary} onChange={event => setCreateSummary(event.target.value)} placeholder="一句话说明这个词条" /></label>
+                <label><span>词条用途</span><input value={createPurpose} onChange={event => setCreatePurpose(event.target.value)} placeholder="这个词条帮助读者理解什么" /></label>
+                <label><span>应该回答的问题（每行一个）</span><textarea rows={3} value={createQuestions} onChange={event => setCreateQuestions(event.target.value)} /></label>
+                <label><span>章节标题</span><input value={createSectionTitle} onChange={event => setCreateSectionTitle(event.target.value)} /></label>
+                <label><span>说明（Markdown）</span><textarea rows={12} value={createBody} onChange={event => setCreateBody(event.target.value)} placeholder="可先写下线索，再让 AI 补充定义、背景、关键事实和影响…" /></label>
+              </div>
+              <footer><button className="secondary-button" type="button" disabled={creatingPage || assistingPage} onClick={() => setCreatePageOpen(false)}>取消</button><button className="primary-button" type="button" disabled={creatingPage || assistingPage || createTitle.trim() === '' || createBody.trim() === ''} onClick={() => void createManualPage()}>{creatingPage ? '创建中...' : '创建词条'}</button></footer>
+            </section>
+          </div>
+        )}
+
+        {categoriesOpen && (
+          <div className="wiki-dialog-backdrop">
+            <section className="wiki-dialog wiki-categories-dialog" role="dialog" aria-modal="true" aria-labelledby="wiki-categories-title">
+              <header>
+                <div><p className="eyebrow">手动维护</p><h2 id="wiki-categories-title">管理分类</h2></div>
+                <button type="button" title="关闭" onClick={() => setCategoriesOpen(false)}><X size={18} /></button>
+              </header>
+              <div className="wiki-category-create">
+                <input value={newCategoryName} onChange={event => setNewCategoryName(event.target.value)} placeholder="新分类名称" onKeyDown={event => { if (event.key === 'Enter') void createCategory() }} />
+                <button className="primary-button" type="button" disabled={categoryBusy || newCategoryName.trim() === ''} onClick={() => void createCategory()}><Plus size={14} />创建</button>
+              </div>
+              <div className="wiki-category-list">
+                {folders.length === 0 ? <p>还没有分类。</p> : folders.map(folder => (
+                  <article key={folder.id}>
+                    {renamingFolderId === folder.id ? (
+                      <input autoFocus value={renameCategoryName} onChange={event => setRenameCategoryName(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') void renameCategory() }} />
+                    ) : <div><strong>{folder.name}</strong><span>{folder.path}</span></div>}
+                    <div>
+                      {renamingFolderId === folder.id ? (
+                        <><button className="secondary-button" type="button" disabled={categoryBusy} onClick={() => setRenamingFolderId(undefined)}>取消</button><button className="primary-button" type="button" disabled={categoryBusy || renameCategoryName.trim() === ''} onClick={() => void renameCategory()}>保存</button></>
+                      ) : (
+                        <><button className="icon-button" type="button" title="重命名" disabled={categoryBusy} onClick={() => { setRenamingFolderId(folder.id); setRenameCategoryName(folder.name) }}><Pencil size={14} /></button><button className="icon-button" type="button" title="删除分类" disabled={categoryBusy} onClick={() => void deleteCategory(folder)}><Trash2 size={14} /></button></>
+                      )}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </section>
+          </div>
+        )}
 
         {historyOpen && page !== undefined && (
           <div className="wiki-dialog-backdrop">

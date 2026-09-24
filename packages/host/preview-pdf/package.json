@@ -13,6 +13,7 @@
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "workspace:^",
+    "@tiggyknowledge/index-fts": "workspace:^",
     "@tiggyknowledge/preview-text": "workspace:^",
     "@tiggyknowledge/producer-pdf": "workspace:^",
     "@tiggyknowledge/plugin-surface": "workspace:^"

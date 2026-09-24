@@ -1,10 +1,15 @@
 import type {
+  AssistWikiPageInput,
+  AssistWikiPageResult,
   ConfirmWikiGenerationInput,
+  CreateWikiFolderInput,
+  CreateWikiPageInput,
   RevertWikiPageInput,
   StartWikiGenerationInput,
   UnlockWikiPageInput,
   PublishWikiPageInput,
   UpdateWikiPageInput,
+  UpdateWikiFolderInput,
   WikiEstimate,
   WikiFolder,
   WikiGeneration,
@@ -27,7 +32,12 @@ export interface WikiHttpHost {
   unlockPage(id: string, expectedVersion: number): WikiPage
   publishPage(id: string, expectedVersion: number): WikiPage
   pages(): WikiPageSummary[]
+  createPage(input: CreateWikiPageInput): WikiPage
+  assistPage(input: AssistWikiPageInput): Promise<AssistWikiPageResult>
   folders(): WikiFolder[]
+  createFolder(input: CreateWikiFolderInput): WikiFolder
+  updateFolder(id: string, input: UpdateWikiFolderInput): WikiFolder
+  deleteFolder(id: string): void
   page(id: string): WikiPage
   updatePage(id: string, input: UpdateWikiPageInput): WikiPage
   revisions(id: string): WikiPageRevision[]
@@ -175,19 +185,73 @@ export function wikiHttpRoutes(wiki: WikiHttpHost): HttpRouteDefinition[] {
       },
     },
     {
+      id: 'wiki:assist-page',
+      methods: ['POST'],
+      path: '/api/wiki/assist',
+      async handler({ assertSameOrigin, json, readJson }) {
+        assertSameOrigin()
+        try {
+          json(await wiki.assistPage(await readJson<AssistWikiPageInput>()))
+        } catch (error) {
+          if (error instanceof RangeError) throw new HttpError(400, 'invalid_wiki_assist', error.message)
+          throw error
+        }
+      },
+    },
+    {
       id: 'wiki:pages',
-      methods: ['GET'],
+      methods: ['GET', 'POST'],
       path: '/api/wiki/pages',
-      handler({ json }) {
-        json(wiki.pages())
+      async handler({ method, assertSameOrigin, json, readJson }) {
+        if (method === 'GET') {
+          json(wiki.pages())
+          return
+        }
+        assertSameOrigin()
+        try {
+          json(wiki.createPage(await readJson<CreateWikiPageInput>()), 201)
+        } catch (error) {
+          if (error instanceof RangeError) throw new HttpError(400, 'invalid_wiki_page', error.message)
+          throw error
+        }
       },
     },
     {
       id: 'wiki:folders',
-      methods: ['GET'],
+      methods: ['GET', 'POST'],
       path: '/api/wiki/folders',
-      handler({ json }) {
-        json(wiki.folders())
+      async handler({ method, assertSameOrigin, json, readJson }) {
+        if (method === 'GET') {
+          json(wiki.folders())
+          return
+        }
+        assertSameOrigin()
+        try {
+          json(wiki.createFolder(await readJson<CreateWikiFolderInput>()), 201)
+        } catch (error) {
+          if (error instanceof RangeError) throw new HttpError(400, 'invalid_wiki_folder', error.message)
+          throw error
+        }
+      },
+    },
+    {
+      id: 'wiki:folder',
+      methods: ['PUT', 'DELETE'],
+      path: /^\/api\/wiki\/folders\/([^/]+)$/,
+      async handler({ method, assertSameOrigin, json, match, readJson }) {
+        assertSameOrigin()
+        const id = pathSegment(match)
+        try {
+          if (method === 'DELETE') {
+            wiki.deleteFolder(id)
+            json({ ok: true })
+            return
+          }
+          json(wiki.updateFolder(id, await readJson<UpdateWikiFolderInput>()))
+        } catch (error) {
+          if (error instanceof RangeError) throw new HttpError(400, 'invalid_wiki_folder', error.message)
+          throw error
+        }
       },
     },
     {

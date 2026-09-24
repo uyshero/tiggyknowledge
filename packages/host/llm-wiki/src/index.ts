@@ -2,11 +2,16 @@ import { createHash, randomUUID } from 'node:crypto'
 import { Context, Service } from '@deepseek-ai/cordis'
 import type {} from '@tiggyknowledge/catalog-sqlite'
 import type {
+  AssistWikiPageInput,
+  AssistWikiPageResult,
+  CreateWikiFolderInput,
+  CreateWikiPageInput,
   KnowledgeDocument,
   ConfirmWikiGenerationInput,
   LlmResolvedEndpoint,
   StartWikiGenerationInput,
   UpdateWikiPageInput,
+  UpdateWikiFolderInput,
   WikiChangeSummary,
   WikiEstimate,
   WikiFolder,
@@ -155,7 +160,7 @@ export class LlmWiki extends Service {
       ...changes.updated.map(document => ({ document, change: 'updated' as const }))]
     return pending.flatMap(({ document, change }) => {
       if (this.ctx.wikiStorage.isInboxSkipped(document.id, document.contentHash)) return []
-      const existing = this.ctx.wikiStorage.pagesForDocument(document.id).find(page => page.pageType !== 'index')
+      const locked = this.ctx.wikiStorage.pagesForDocument(document.id).some(page => page.pageType !== 'index' && page.state === 'locked')
       return [{
         documentId: document.id,
         libraryId: document.libraryId,
@@ -163,7 +168,7 @@ export class LlmWiki extends Service {
         title: document.title,
         contentHash: document.contentHash,
         change,
-        locked: existing?.state === 'locked',
+        locked,
       }]
     })
   }
@@ -177,7 +182,7 @@ export class LlmWiki extends Service {
     return pending.flatMap(({ document, change }) => {
       const skip = skips.get(`${document.id}:${document.contentHash}`)
       if (skip === undefined) return []
-      const existing = this.ctx.wikiStorage.pagesForDocument(document.id).find(page => page.pageType !== 'index')
+      const locked = this.ctx.wikiStorage.pagesForDocument(document.id).some(page => page.pageType !== 'index' && page.state === 'locked')
       return [{
         documentId: document.id,
         libraryId: document.libraryId,
@@ -185,7 +190,7 @@ export class LlmWiki extends Service {
         title: document.title,
         contentHash: document.contentHash,
         change,
-        locked: existing?.state === 'locked',
+        locked,
         skippedAt: skip.skippedAt,
       }]
     })
@@ -259,8 +264,8 @@ export class LlmWiki extends Service {
     if (document === undefined) throw new RangeError('知识文档不存在')
     this.ctx.wikiStorage.unskipInboxItem(document.id)
     const pending = this.inbox().find(item => item.documentId === document.id)
-    const existing = this.ctx.wikiStorage.pagesForDocument(document.id).find(page => page.pageType !== 'index')
-    if (existing?.state === 'locked') throw new RangeError('该词条已锁定，请先允许自动更新')
+    const existing = this.ctx.wikiStorage.pagesForDocument(document.id).filter(page => page.pageType !== 'index')
+    if (existing.some(page => page.state === 'locked')) throw new RangeError('该词条已锁定；该文章关联的词条需先全部允许自动更新')
     if (pending === undefined && !force) {
       const snapshot = this.ctx.wikiStorage.listDocumentSnapshots().find(item => item.documentId === document.id)
       if (snapshot !== undefined && snapshot.contentHash === document.contentHash) {
@@ -283,6 +288,115 @@ export class LlmWiki extends Service {
 
   folders(): WikiFolder[] {
     return this.ctx.wikiStorage.listFolders()
+  }
+
+  createFolder(input: CreateWikiFolderInput): WikiFolder {
+    const name = folderName(input.name)
+    const folders = this.ctx.wikiStorage.listFolders()
+    const parent = input.parentId === undefined ? undefined : folders.find(item => item.id === input.parentId)
+    if (input.parentId !== undefined && parent === undefined) throw new RangeError('上级 Wiki 分类不存在')
+    const path = parent === undefined ? name : `${parent.path}/${name}`
+    if (folders.some(item => item.path === path)) throw new RangeError('同级分类名称已存在')
+    const siblings = folders.filter(item => item.parentId === input.parentId)
+    return this.ctx.wikiStorage.createFolder({
+      id: randomUUID(),
+      name,
+      path,
+      ...(parent === undefined ? {} : { parentId: parent.id }),
+      depth: parent === undefined ? 0 : parent.depth + 1,
+      order: siblings.reduce((maximum, item) => Math.max(maximum, item.order), -1) + 1,
+    })
+  }
+
+  updateFolder(id: string, input: UpdateWikiFolderInput): WikiFolder {
+    const folders = this.ctx.wikiStorage.listFolders()
+    const current = folders.find(item => item.id === id)
+    if (current === undefined) throw new RangeError('Wiki 分类不存在')
+    const name = folderName(input.name)
+    const parent = current.parentId === undefined ? undefined : folders.find(item => item.id === current.parentId)
+    const path = parent === undefined ? name : `${parent.path}/${name}`
+    if (folders.some(item => item.id !== id && item.path === path)) throw new RangeError('同级分类名称已存在')
+    return this.ctx.wikiStorage.renameFolder(id, name, path)
+  }
+
+  deleteFolder(id: string): void {
+    this.ctx.wikiStorage.deleteFolder(id)
+  }
+
+  createPage(input: CreateWikiPageInput): WikiPage {
+    const title = text(input.title, '词条标题', 1, 200)
+    const type = input.pageType === undefined ? 'concept' : pageType(input.pageType)
+    if (type === 'index') throw new RangeError('不能手动创建 Wiki 首页')
+    const folder = input.folderId === undefined
+      ? undefined
+      : this.ctx.wikiStorage.listFolders().find(item => item.id === input.folderId)
+    if (input.folderId !== undefined && folder === undefined) throw new RangeError('Wiki 分类不存在')
+    const existingSlugs = new Set(this.ctx.wikiStorage.listPages().map(item => item.slug))
+    const slug = uniqueSlug(normalizeWikiSlug(undefined, title, type), existingSlugs)
+    const body = text(input.body, '词条正文', 1, 200_000)
+    return this.ctx.wikiStorage.createPage({
+      id: randomUUID(),
+      slug,
+      title,
+      summary: input.summary === undefined ? '' : text(input.summary, '页面摘要', 0, 500),
+      pageType: type,
+      status: 'published',
+      aliases: input.aliases === undefined ? [] : aliases(input.aliases),
+      purpose: input.purpose === undefined ? '' : text(input.purpose, '词条用途', 0, 500),
+      questions: input.questions === undefined ? [] : questions(input.questions),
+      ...(folder === undefined ? {} : { folderId: folder.id }),
+      order: this.ctx.wikiStorage.listPages().reduce((maximum, item) => Math.max(maximum, item.order), -1) + 1,
+      state: 'locked',
+      sections: [{
+        id: randomUUID(),
+        title: input.sectionTitle === undefined ? '说明' : text(input.sectionTitle, '章节标题', 1, 200),
+        body,
+        order: 0,
+        state: 'locked',
+        sources: [],
+      }],
+    })
+  }
+
+  async assistPage(input: AssistWikiPageInput): Promise<AssistWikiPageResult> {
+    const title = text(input.title, '词条标题', 1, 200)
+    const type = input.pageType === undefined ? 'concept' : pageType(input.pageType)
+    if (type === 'index') throw new RangeError('Wiki 首页不能使用词条补充')
+    const notes = input.notes === undefined ? '' : text(input.notes, '补充线索', 0, 5_000)
+    const result = await this.ctx.llmClient.complete({
+      settings: this.wikiEndpoint(),
+      temperature: 0.2,
+      json: true,
+      maxAttempts: 3,
+      messages: [
+        {
+          role: 'system',
+          content: [
+            '你是 Wiki 词条编辑助手。用户给出一个人物、组织、地点、产品、项目、术语、概念、决策或事件名称，请生成一份可继续编辑的中文解释草稿。',
+            '只输出 JSON：{"summary":"不超过80字","purpose":"这个词条的用途","questions":["最多3个问题"],"sectionTitle":"说明","body":"Markdown 正文"}。',
+            '正文应先给出清晰定义，再说明背景、关键特征、影响或与相关概念的区别。',
+            '对不确定、存在歧义或时效性强的信息要明确说明，不能编造具体数字、日期、人物经历或事件细节。',
+            '用户提供的线索优先于通用知识。不要输出来源不存在的引用，不要输出思考过程。',
+          ].join('\n'),
+        },
+        {
+          role: 'user',
+          content: JSON.stringify({
+            title,
+            pageType: type,
+            notes: notes || null,
+          }),
+        },
+      ],
+    })
+    const parsed = parseJsonObject(result.content)
+    return {
+      summary: text(parsed.summary ?? '', '页面摘要', 0, 500),
+      purpose: text(parsed.purpose ?? '', '词条用途', 0, 500),
+      questions: generatedQuestions(parsed.questions),
+      sectionTitle: text(parsed.sectionTitle ?? '说明', '章节标题', 1, 200),
+      body: text(parsed.body, '词条正文', 1, 200_000),
+    }
   }
 
   page(idOrSlug: string): WikiPage {
@@ -315,6 +429,10 @@ export class LlmWiki extends Service {
         sources: previous?.sources ?? [],
       }
     })
+    const folderId = input.folderId === undefined ? current.folderId : input.folderId ?? undefined
+    if (folderId !== undefined && !this.ctx.wikiStorage.listFolders().some(folder => folder.id === folderId)) {
+      throw new RangeError('Wiki 分类不存在')
+    }
     return this.ctx.wikiStorage.updatePage({
       id: current.id,
       slug: current.slug,
@@ -325,6 +443,7 @@ export class LlmWiki extends Service {
       aliases: input.aliases === undefined ? current.aliases : aliases(input.aliases),
       purpose: input.purpose === undefined ? current.purpose : text(input.purpose, '词条用途', 0, 500),
       questions: input.questions === undefined ? current.questions : questions(input.questions),
+      ...(folderId === undefined ? {} : { folderId }),
       ...(current.parentId === undefined ? {} : { parentId: current.parentId }),
       order: current.order,
       state: 'locked',
@@ -430,11 +549,19 @@ export class LlmWiki extends Service {
       this.throwIfCancelled(id, controller.signal)
       const summary = this.ctx.wikiStorage.cachedSummary(document.id, document.contentHash) ?? ''
       const libraryName = this.ctx.knowledgeCatalog.listLibraries().find(library => library.id === document.libraryId)?.name ?? '未分组'
-      const existing = this.ctx.wikiStorage.pagesForDocument(document.id).find(page => page.pageType !== 'index')
-      if (existing?.state === 'locked') throw new RangeError('该词条已锁定，请先允许自动更新')
-      const folderPath = [normalizeFolderName(libraryName) ?? '未分组']
-      const preferredSlug = existing?.slug
-      const existingPage = existing === undefined ? undefined : this.ctx.wikiStorage.getPage(existing.id)
+      const existing = this.ctx.wikiStorage.pagesForDocument(document.id).filter(page => page.pageType !== 'index')
+      if (existing.some(page => page.state === 'locked')) throw new RangeError('该词条已锁定；该文章关联的词条需先全部允许自动更新')
+      const existingPages = existing.flatMap(item => {
+        const value = this.ctx.wikiStorage.getPage(item.id)
+        return value === undefined ? [] : [{
+          slug: value.slug,
+          title: value.title,
+          pageType: value.pageType,
+          summary: value.summary,
+          purpose: value.purpose,
+          sections: value.sections.map(section => ({ title: section.title, body: section.body })),
+        }]
+      })
       const synthesisInput = truncateForModel(JSON.stringify({
         document: {
           documentId: document.id,
@@ -445,15 +572,8 @@ export class LlmWiki extends Service {
           summary,
           content: preview.content,
         },
-        existingSlug: preferredSlug ?? null,
-        existingPage: existingPage === undefined ? null : {
-          title: existingPage.title,
-          summary: existingPage.summary,
-          purpose: existingPage.purpose,
-          questions: existingPage.questions,
-          sections: existingPage.sections.map(section => ({ title: section.title, body: section.body })),
-        },
-        folderPath,
+        existingPages,
+        existingCategories: this.ctx.wikiStorage.listFolders().map(folder => folder.path),
       }), settings.maxInputTokens)
       let synthesis = await this.ctx.llmClient.complete({
         settings: {
@@ -468,15 +588,17 @@ export class LlmWiki extends Service {
           {
             role: 'system',
             content: [
-              '你是 Wiki 编辑。根据这一篇知识文章生成一个可独立阅读的中文词条，不要合并其他文章，也不要拆成多个词条。',
-              '只输出 JSON：{"pages":[{"title":"...","slug":"topic/example","summary":"不超过80字","pageType":"topic","aliases":[],"purpose":"...","questions":["..."],"folderPath":["分类"],"parentSlug":null,"sections":[{"title":"...","body":"Markdown","sourceDocumentIds":["文档ID"]}]}]}。',
-              'pageType 只能是 entity、concept、glossary、project、policy、procedure、decision、topic。',
+              '你是 Wiki 编辑。不要把整篇文章改写成一个词条。请提取文章中最关键、值得长期检索和独立解释的人物、组织、地点、产品、项目、术语、概念、制度、流程、决策和事件，分别生成词条。',
+              '提取优先级：新出现或反复出现的专有名词与新词 > 明确命名的人物、组织、产品和项目 > 有时间、参与者、原因或影响的事件与决策 > 普通背景概念。',
+              '只保留有稳定名称、包含可验证事实或对理解知识库重要的对象；忽略泛词、一次性措辞、文章标题和仅有一句带过的次要对象。通常生成 2 到 8 个词条，信息不足时可以更少。',
+              '只输出 JSON：{"pages":[{"title":"...","slug":"entity/example","summary":"不超过80字","pageType":"entity","aliases":[],"purpose":"...","questions":["..."],"folderPath":["人物"],"parentSlug":null,"sections":[{"title":"...","body":"Markdown","sourceDocumentIds":["文档ID"]}]}]}。',
+              'pageType 只能是 entity、concept、glossary、project、policy、procedure、decision、event、topic。',
               '必须且只能使用输入中的这一篇文档 ID 作为 sourceDocumentIds。',
-              'folderPath 必须沿用输入中的分类。若提供 existingSlug，必须原样使用该 slug。',
+              '优先使用 existingCategories 中合适的分类；没有合适分类时，使用人物、组织、地点、产品与项目、术语与概念、制度与规则、流程与操作、决策、事件之一。',
+              '如果对象与 existingPages 中词条相同，必须沿用其 slug 并更新内容，避免重复词条。',
               '词条要让没读过原文的人也能看懂。原文写明的事实、数字、结论必须忠实保留，不得编造文中没有的数据、日期、人名或决策。',
-              '原文只点到、没有解释的术语、制度、角色、流程和背景，请用通用知识补全简明解释，写成完整段落，不要只摘录原句。',
-              '补全的背景说明要服务于理解这篇文档，不要写成无关百科。若有已有词条，在保留其正确内容的基础上补全缺漏解释。',
-              '不要写 Wiki 首页，不要写主题导航，不要输出思考过程。每页 2 到 4 个章节。',
+              '可以用通用知识补全简明解释，但必须与原文事实清楚区分，不得杜撰具体信息。',
+              '不要写 Wiki 首页，不要写主题导航，不要输出思考过程。每页 1 到 3 个章节。',
             ].join('\n'),
           },
           { role: 'user', content: synthesisInput },
@@ -503,9 +625,9 @@ export class LlmWiki extends Service {
             {
               role: 'system',
               content: [
-                '上一次 Wiki JSON 被截断。请返回紧凑且完整的 {"pages":[...]}，只生成一个词条。',
-                '每页 2 个章节。先写清这篇文档在讲什么，再补全原文未展开但阅读所需的概念解释。',
-                '每个章节不超过 700 个中文字符。来源 ID 必须是输入中的文档。不得编造文中没有的具体事实。',
+                '上一次 Wiki JSON 被截断。请返回紧凑且完整的 {"pages":[...]}。',
+                '只保留最关键的 2 到 5 个人物、组织、地点、项目、概念、决策或事件词条，每页 1 到 2 个章节。',
+                '每个章节不超过 500 个中文字符。来源 ID 必须是输入中的文档。不得编造文中没有的具体事实。',
               ].join('\n'),
             },
             { role: 'user', content: synthesisInput },
@@ -516,23 +638,30 @@ export class LlmWiki extends Service {
         parsedPages = this.parsePages(synthesis.content, [document])
       }
       if (parsedPages.length === 0) throw new Error('LLM 未生成词条')
-      const generated = parsedPages.find(page => page.pageType !== 'index') ?? parsedPages[0]!
-      generated.folderPath = folderPath
-      generated.slug = preferredSlug ?? generated.slug
-      generated.status = 'draft'
-      generated.sections = generated.sections.map(section => ({
-        ...section,
-        sources: [wikiSource(document)],
+      const availableCategoryPaths = new Set(this.ctx.wikiStorage.listFolders().map(folder => folder.path))
+      const generated = parsedPages.filter(page => page.pageType !== 'index').map(page => ({
+        ...page,
+        folderPath: page.folderPath !== undefined && availableCategoryPaths.has(page.folderPath.join('/'))
+          ? page.folderPath
+          : defaultFolderPath(page.pageType ?? 'concept'),
+        status: 'draft' as const,
+        sections: page.sections.map(section => ({
+          ...section,
+          sources: [wikiSource(document)],
+        })),
       }))
+      if (generated.length === 0) throw new Error('LLM 未提取到有效词条')
       const folders = this.ctx.wikiStorage.listFolders()
       const folderPathById = new Map(folders.map(folder => [folder.id, folder.path.split('/').filter(Boolean)]))
+      const generatedSlugs = new Set(generated.map(page => page.slug))
+      const replacedIds = new Set(existing.map(page => page.id))
       const preserved: PlannedPage[] = this.storedPages()
-        .filter(page => page.pageType !== 'index' && page.slug !== generated.slug)
+        .filter(page => page.pageType !== 'index' && !generatedSlugs.has(page.slug) && !replacedIds.has(page.id))
         .map(page => ({
           ...page,
           folderPath: page.folderId === undefined ? [] : folderPathById.get(page.folderId) ?? [],
         }))
-      const planned = linkGeneratedPages([generated, ...preserved], [generated, ...preserved]) as PlannedPage[]
+      const planned = linkGeneratedPages([...generated, ...preserved], [...generated, ...preserved]) as PlannedPage[]
       const organized = organizePages(planned)
       const previous = this.ctx.wikiStorage.listDocumentSnapshots()
       const nextSnapshots = [
@@ -868,6 +997,7 @@ function defaultFolderPath(type: WikiPageType): string[] {
   if (type === 'policy') return ['制度与规则']
   if (type === 'procedure') return ['流程与操作']
   if (type === 'decision') return ['决策']
+  if (type === 'event') return ['事件']
   if (type === 'topic' || type === 'synthesis') return ['专题']
   if (type === 'comparison') return ['对比']
   if (type === 'summary') return ['文档摘要']
@@ -938,7 +1068,7 @@ function text(value: unknown, label: string, minimum: number, maximum: number): 
 function generatedPageType(value: unknown): WikiPageType {
   return value === 'entity' || value === 'concept' || value === 'glossary'
     || value === 'project' || value === 'policy' || value === 'procedure'
-    || value === 'decision' || value === 'topic' || value === 'index'
+    || value === 'decision' || value === 'event' || value === 'topic' || value === 'index'
     || value === 'synthesis' || value === 'comparison'
     ? value
     : 'concept'
@@ -964,7 +1094,7 @@ function generatedQuestions(value: unknown): string[] {
 function pageType(value: WikiPageType): WikiPageType {
   if (value === 'summary' || value === 'entity' || value === 'concept' || value === 'glossary'
     || value === 'project' || value === 'policy' || value === 'procedure'
-    || value === 'decision' || value === 'topic' || value === 'index'
+    || value === 'decision' || value === 'event' || value === 'topic' || value === 'index'
     || value === 'synthesis' || value === 'comparison') return value
   throw new RangeError('Wiki 页面类型无效')
 }
@@ -984,6 +1114,13 @@ function questions(value: string[]): string[] {
   if (!Array.isArray(value)) throw new RangeError('Wiki 词条问题必须是数组')
   if (value.length > 5) throw new RangeError('Wiki 词条问题最多 5 个')
   return [...new Set(value.map(item => text(item, '词条问题', 1, 200)))]
+}
+
+function folderName(value: unknown): string {
+  if (typeof value !== 'string') throw new RangeError('分类名称必须是文本')
+  const name = normalizeFolderName(value)
+  if (name === undefined) throw new RangeError('分类名称不能为空')
+  return name
 }
 
 function friendlyPhase(phase: string): string {

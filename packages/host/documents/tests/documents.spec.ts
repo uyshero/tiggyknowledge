@@ -9,6 +9,7 @@ import DocumentMetadata from '@tiggyknowledge/document-metadata'
 import FtsIndex from '@tiggyknowledge/index-fts'
 import KnowledgeIngestion from '@tiggyknowledge/ingestion'
 import MetadataSqlite from '@tiggyknowledge/metadata-sqlite'
+import PdfProducer from '@tiggyknowledge/producer-pdf'
 import TextPreview from '@tiggyknowledge/preview-text'
 import TextProducer from '@tiggyknowledge/producer-text'
 import KnowledgeQueryService from '@tiggyknowledge/query'
@@ -16,6 +17,7 @@ import KnowledgeSemanticCapabilities from '@tiggyknowledge/semantic-capabilities
 import UrlProducer from '@tiggyknowledge/producer-url'
 import { describe, expect, it } from 'vitest'
 import KnowledgeDocuments from '../src/index.ts'
+import { minimalPdf } from '../../producer-pdf/tests/fixture.ts'
 
 describe('knowledge documents', () => {
   it('lists, previews, and deletes documents with their search index', async () => {
@@ -142,6 +144,42 @@ describe('knowledge documents', () => {
       expect(() => ctx.knowledgeDocuments.updateUrlExtractedContent(noteId, {
         text: '这段正文不应该写入 Markdown 条目。',
       })).toThrow('只有网页知识条目支持同步页面正文')
+    } finally {
+      await ctx.fiber.dispose()
+      rmSync(dataDir, { recursive: true, force: true })
+    }
+  })
+
+  it('imports a scanned PDF and indexes local OCR text later', async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), 'tiggyknowledge-pdf-ocr-'))
+    const ctx = new Context()
+    try {
+      await ctx.plugin(CatalogSqlite, { dataDir })
+      await ctx.plugin(ContentLocal, { dataDir })
+      await ctx.plugin(MetadataSqlite, { dataDir })
+      await ctx.plugin(TextProducer)
+      await ctx.plugin(PdfProducer)
+      await ctx.plugin(BasicChunker)
+      await ctx.plugin(FtsIndex, { dataDir })
+      await ctx.plugin(KnowledgeIngestion)
+      await ctx.plugin(KnowledgeDocuments)
+      await ctx.plugin(DocumentMetadata)
+      await ctx.plugin(KnowledgeSemanticCapabilities)
+      await ctx.plugin(KnowledgeQueryService)
+
+      const library = ctx.knowledgeCatalog.createLibrary({ name: '扫描件测试库' })
+      const imported = await ctx.knowledgeIngestion.ingest(library.id, [
+        { name: 'scan.pdf', bytes: minimalPdf('') },
+        { name: 'note.txt', bytes: new TextEncoder().encode('普通文本') },
+      ])
+      const documentId = imported.results[0]?.document?.id ?? ''
+      const noteId = imported.results[1]?.document?.id ?? ''
+      expect(imported.results[0]).toMatchObject({ status: 'imported', document: { sourceType: 'pdf' } })
+      expect(ctx.knowledgeDocuments.updatePdfOcr(documentId, {
+        pages: ['第一页 OcrUniqueKeyword 识别结果', '第二页识别结果'],
+      })).toMatchObject({ indexStatus: 'ready' })
+      expect(ctx.knowledgeQuery.search({ text: 'OcrUniqueKeyword', knowledgeBaseIds: [] }).total).toBe(1)
+      expect(() => ctx.knowledgeDocuments.updatePdfOcr(noteId, { pages: ['无效'] })).toThrow('只有 PDF 支持 OCR')
     } finally {
       await ctx.fiber.dispose()
       rmSync(dataDir, { recursive: true, force: true })

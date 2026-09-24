@@ -510,6 +510,71 @@ export class WikiSqlite extends Service {
     }))
   }
 
+  createFolder(folder: WikiFolderWrite): WikiFolder {
+    const database = this.requireDatabase()
+    database.prepare(`
+      INSERT INTO wiki_folders(id, name, path, parent_id, depth, order_index)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(folder.id, folder.name, folder.path, folder.parentId ?? null, folder.depth, folder.order)
+    return this.listFolders().find(item => item.id === folder.id)!
+  }
+
+  renameFolder(id: string, name: string, path: string): WikiFolder {
+    const database = this.requireDatabase()
+    const current = this.listFolders().find(item => item.id === id)
+    if (current === undefined) throw new RangeError('Wiki 分类不存在')
+    database.exec('BEGIN IMMEDIATE')
+    try {
+      database.prepare('UPDATE wiki_folders SET name = ?, path = ? WHERE id = ?').run(name, path, id)
+      const oldPrefix = `${current.path}/`
+      const descendants = this.listFolders().filter(item => item.path.startsWith(oldPrefix))
+      const update = database.prepare('UPDATE wiki_folders SET path = ? WHERE id = ?')
+      for (const descendant of descendants) {
+        update.run(`${path}/${descendant.path.slice(oldPrefix.length)}`, descendant.id)
+      }
+      database.exec('COMMIT')
+    } catch (error) {
+      database.exec('ROLLBACK')
+      if (error instanceof Error && error.message.includes('UNIQUE')) throw new RangeError('同级分类名称已存在')
+      throw error
+    }
+    return this.listFolders().find(item => item.id === id)!
+  }
+
+  deleteFolder(id: string): void {
+    const database = this.requireDatabase()
+    if (!this.listFolders().some(item => item.id === id)) throw new RangeError('Wiki 分类不存在')
+    database.prepare('DELETE FROM wiki_folders WHERE id = ?').run(id)
+  }
+
+  createPage(page: WikiPageWrite, createdAt = new Date().toISOString()): WikiPage {
+    const database = this.requireDatabase()
+    const metadata = pageMetadata(page)
+    database.exec('BEGIN IMMEDIATE')
+    try {
+      database.prepare(`
+        INSERT INTO wiki_pages(
+          id, slug, title, summary, page_type, publication_status, aliases_json,
+          purpose, questions_json, folder_id, parent_id, order_index, state,
+          version, last_edit_source, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'user', ?)
+      `).run(
+        page.id, page.slug, page.title, metadata.summary, metadata.pageType,
+        metadata.status, JSON.stringify(metadata.aliases), metadata.purpose,
+        JSON.stringify(metadata.questions), page.folderId ?? null, page.parentId ?? null,
+        page.order, page.state ?? 'locked', createdAt,
+      )
+      this.insertSections(database, page.id, page.sections)
+      this.insertLinks(database, page.id, page.sections)
+      database.exec('COMMIT')
+    } catch (error) {
+      database.exec('ROLLBACK')
+      if (error instanceof Error && error.message.includes('UNIQUE')) throw new RangeError('同名 Wiki 词条已存在')
+      throw error
+    }
+    return this.getPage(page.id)!
+  }
+
   listArchivedPages(): WikiPageSummary[] {
     const rows = this.requireDatabase().prepare(`
       SELECT id, slug, title, summary, page_type, publication_status, aliases_json, purpose, questions_json,
@@ -684,12 +749,12 @@ export class WikiSqlite extends Service {
       const metadata = pageMetadata(page)
       const result = database.prepare(`
         UPDATE wiki_pages SET title = ?, summary = ?, page_type = ?, publication_status = ?,
-          aliases_json = ?, purpose = ?, questions_json = ?, state = 'locked', version = version + 1,
+          aliases_json = ?, purpose = ?, questions_json = ?, folder_id = ?, state = 'locked', version = version + 1,
           last_edit_source = ?, updated_at = ? WHERE id = ? AND version = ?
       `).run(
         page.title, metadata.summary, metadata.pageType, metadata.status,
         JSON.stringify(metadata.aliases), metadata.purpose, JSON.stringify(metadata.questions),
-        editSource, now, page.id, expectedVersion,
+        page.folderId ?? null, editSource, now, page.id, expectedVersion,
       )
       if (result.changes !== 1) throw new RangeError('Wiki 页面已被其他操作更新，请刷新后重试')
       database.prepare('DELETE FROM wiki_sections WHERE page_id = ?').run(page.id)
@@ -736,6 +801,7 @@ export class WikiSqlite extends Service {
       aliases: revision.aliases,
       purpose: revision.purpose,
       questions: revision.questions,
+      ...(current.folderId === undefined ? {} : { folderId: current.folderId }),
       ...(current.parentId === undefined ? {} : { parentId: current.parentId }),
       order: current.order,
       state: 'locked',
@@ -756,6 +822,7 @@ export class WikiSqlite extends Service {
       aliases: current.aliases,
       purpose: current.purpose,
       questions: current.questions,
+      ...(current.folderId === undefined ? {} : { folderId: current.folderId }),
       ...(current.parentId === undefined ? {} : { parentId: current.parentId }),
       order: current.order,
       state: 'locked',

@@ -18,6 +18,9 @@
       "path": "../producer-pdf"
     },
     {
+      "path": "../index-fts"
+    },
+    {
       "path": "../preview-text"
     },
     {

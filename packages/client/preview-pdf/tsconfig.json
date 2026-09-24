@@ -6,6 +6,7 @@
     { "path": "../../../vendor/cosmokit" },
     { "path": "../../../vendor/cordis" },
     { "path": "../../core/contracts" },
+    { "path": "../connection" },
     { "path": "../runtime" }
   ]
 }

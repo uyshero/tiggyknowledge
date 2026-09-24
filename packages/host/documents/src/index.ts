@@ -3,7 +3,7 @@ import type {} from '@tiggyknowledge/catalog-sqlite'
 import type {} from '@tiggyknowledge/chunker-basic'
 import type {} from '@tiggyknowledge/content-local'
 import type {} from '@tiggyknowledge/document-metadata'
-import type { DeleteKnowledgeDocumentsInput, DeleteKnowledgeDocumentsResult, DeleteKnowledgeLibraryResult, KnowledgeDocument, KnowledgeDocumentList, KnowledgeDocumentRevisionList, UpdateKnowledgeDocumentTitleInput, UpdateKnowledgeMarkdownNoteInput, UpdateKnowledgeUrlExtractedContentInput } from '@tiggyknowledge/contracts'
+import type { DeleteKnowledgeDocumentsInput, DeleteKnowledgeDocumentsResult, DeleteKnowledgeLibraryResult, KnowledgeDocument, KnowledgeDocumentList, KnowledgeDocumentRevisionList, UpdateKnowledgeDocumentTitleInput, UpdateKnowledgeMarkdownNoteInput, UpdateKnowledgePdfOcrInput, UpdateKnowledgeUrlExtractedContentInput } from '@tiggyknowledge/contracts'
 import type {} from '@tiggyknowledge/index-fts'
 import { contributeSurface, httpFromRange, pathSegment } from '@tiggyknowledge/plugin-surface'
 import { composeUrlIndexBody, parseShortcutUrl } from '@tiggyknowledge/producer-url'
@@ -15,6 +15,7 @@ declare module '@deepseek-ai/cordis' {
 }
 
 const MAX_DOCUMENT_JSON_BODY_BYTES = 800 * 1024
+const MAX_OCR_JSON_BODY_BYTES = 12 * 1024 * 1024
 
 export class KnowledgeDocuments extends Service {
   static inject = ['knowledgeCatalog', 'knowledgeContent', 'knowledgeChunker', 'knowledgeIndex', 'knowledgeMetadata']
@@ -122,6 +123,19 @@ export class KnowledgeDocuments extends Service {
             assertSameOrigin()
             try {
               json(this.updateUrlExtractedContent(pathSegment(match), await readJson<UpdateKnowledgeUrlExtractedContentInput>(MAX_DOCUMENT_JSON_BODY_BYTES)))
+            } catch (error) {
+              throw httpFromRange(error, 'invalid_document')
+            }
+          },
+        },
+        {
+          id: 'documents:pdf-ocr',
+          methods: ['PUT'],
+          path: /^\/api\/documents\/([^/]+)\/pdf-ocr$/,
+          handler: async ({ assertSameOrigin, json, match, readJson }) => {
+            assertSameOrigin()
+            try {
+              json(this.updatePdfOcr(pathSegment(match), await readJson<UpdateKnowledgePdfOcrInput>(MAX_OCR_JSON_BODY_BYTES)))
             } catch (error) {
               throw httpFromRange(error, 'invalid_document')
             }
@@ -298,6 +312,37 @@ export class KnowledgeDocuments extends Service {
       }
     } else {
       this.ctx.knowledgeIndex.updateTitle(updated.id, updated.title)
+    }
+    this.ctx.emit('knowledge/graph/invalidate')
+    this.ctx.emit('knowledge/document/changed', [updated.id])
+    return updated
+  }
+
+  updatePdfOcr(documentId: string, input: UpdateKnowledgePdfOcrInput): KnowledgeDocument {
+    const document = this.ctx.knowledgeCatalog.getDocuments([documentId])[0]
+    if (document === undefined) throw new RangeError('知识条目不存在')
+    if (document.sourceType !== 'pdf') throw new RangeError('只有 PDF 支持 OCR 识别结果')
+    if (!Array.isArray(input.pages) || input.pages.length === 0 || input.pages.length > 500) {
+      throw new RangeError('OCR 结果应包含 1 到 500 页')
+    }
+    let characters = 0
+    const pages = input.pages.map((page, index) => {
+      if (typeof page !== 'string') throw new RangeError(`第 ${index + 1} 页 OCR 结果无效`)
+      const text = page.trim()
+      characters += text.length
+      if (characters > 8_000_000) throw new RangeError('OCR 文本超过 800 万字限制')
+      return text
+    })
+    if (pages.every(page => page.length === 0)) throw new RangeError('OCR 未识别到文字')
+    const body = pages.join('\n\f\n')
+    let updated = this.ctx.knowledgeCatalog.setDocumentIndexStatus(document.id, 'pending')
+    const chunks = this.ctx.knowledgeChunker.chunk({ body, sourceType: 'pdf' })
+    try {
+      this.ctx.knowledgeIndex.index({ id: updated.id, libraryId: updated.libraryId, title: updated.title }, chunks)
+      updated = this.ctx.knowledgeCatalog.setDocumentIndexStatus(updated.id, 'ready')
+    } catch (error) {
+      updated = this.ctx.knowledgeCatalog.setDocumentIndexStatus(updated.id, 'failed')
+      throw error
     }
     this.ctx.emit('knowledge/graph/invalidate')
     this.ctx.emit('knowledge/document/changed', [updated.id])

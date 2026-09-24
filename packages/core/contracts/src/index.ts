@@ -234,6 +234,10 @@ export interface UpdateKnowledgeUrlExtractedContentInput {
   text: string
 }
 
+export interface UpdateKnowledgePdfOcrInput {
+  pages: string[]
+}
+
 export interface KnowledgeDocumentRevision {
   documentId: string
   version: number
@@ -643,6 +647,7 @@ export type WikiPageType =
   | 'policy'
   | 'procedure'
   | 'decision'
+  | 'event'
   | 'topic'
   | 'index'
   | 'synthesis'
@@ -809,11 +814,47 @@ export interface UpdateWikiPageInput {
   summary?: string
   pageType?: WikiPageType
   status?: WikiPageStatus
+  folderId?: string | null
   aliases?: string[]
   purpose?: string
   questions?: string[]
   expectedVersion: number
   sections: Array<Pick<WikiSection, 'id' | 'title' | 'body'>>
+}
+
+export interface CreateWikiPageInput {
+  title: string
+  summary?: string
+  pageType?: WikiPageType
+  folderId?: string
+  aliases?: string[]
+  purpose?: string
+  questions?: string[]
+  sectionTitle?: string
+  body: string
+}
+
+export interface AssistWikiPageInput {
+  title: string
+  pageType?: WikiPageType
+  notes?: string
+}
+
+export interface AssistWikiPageResult {
+  summary: string
+  purpose: string
+  questions: string[]
+  sectionTitle: string
+  body: string
+}
+
+export interface CreateWikiFolderInput {
+  name: string
+  parentId?: string
+}
+
+export interface UpdateWikiFolderInput {
+  name: string
 }
 
 export interface WikiPageRevision {

@@ -16,7 +16,10 @@ describe('pdf producer plugin', () => {
         body: expect.stringContaining('TiggyPdfKeyword'),
       })
       await expect(ctx.textProducer.produce('broken.pdf', new Uint8Array([1, 2, 3]))).rejects.toThrow('无法解析')
-      await expect(ctx.textProducer.produce('scan.pdf', minimalPdf(''))).rejects.toThrow('OCR 插件')
+      await expect(ctx.textProducer.produce('scan.pdf', minimalPdf(''))).resolves.toMatchObject({
+        sourceType: 'pdf',
+        body: expect.stringContaining('尚未进行 OCR'),
+      })
       const extracted = await ctx.pdfProducer.extract('book.pdf', multiPagePdf(3))
       expect(extracted).toMatchObject({ pageCount: 3, truncated: false })
       expect(extracted.pages).toHaveLength(3)

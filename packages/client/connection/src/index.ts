@@ -1,6 +1,10 @@
 import { Context, Service } from '@deepseek-ai/cordis'
 import type {
+  AssistWikiPageInput,
+  AssistWikiPageResult,
   ConfirmWikiGenerationInput,
+  CreateWikiFolderInput,
+  CreateWikiPageInput,
   CreateKnowledgeLibraryInput,
   CreateKnowledgeNoteInput,
   CreateKnowledgeUrlInput,
@@ -51,6 +55,7 @@ import type {
   TestLlmConnectionResult,
   UpdateLlmIntegrationSettingsInput,
   UpdateWikiPageInput,
+  UpdateWikiFolderInput,
   UpdateWikiIssueInput,
   WikiEstimate,
   WikiGeneration,
@@ -66,6 +71,7 @@ import type {
   UpdateDshIntegrationSettingsInput,
   UpdateKnowledgeDocumentTitleInput,
   UpdateKnowledgeMarkdownNoteInput,
+  UpdateKnowledgePdfOcrInput,
   UpdateKnowledgeUrlExtractedContentInput,
   UpdateStudioRecordingInput,
   UpdateKnowledgeLibraryInput,
@@ -308,8 +314,51 @@ export class ConnectionService extends Service {
     return await this.request<WikiPageSummary[]>('/api/wiki/pages', signal === undefined ? {} : { signal })
   }
 
+  async createWikiPage(input: CreateWikiPageInput, signal?: AbortSignal): Promise<WikiPage> {
+    return await this.request<WikiPage>('/api/wiki/pages', {
+      body: JSON.stringify(input),
+      headers: { 'content-type': 'application/json' },
+      method: 'POST',
+      ...(signal === undefined ? {} : { signal }),
+    })
+  }
+
+  async assistWikiPage(input: AssistWikiPageInput, signal?: AbortSignal): Promise<AssistWikiPageResult> {
+    return await this.request<AssistWikiPageResult>('/api/wiki/assist', {
+      body: JSON.stringify(input),
+      headers: { 'content-type': 'application/json' },
+      method: 'POST',
+      ...(signal === undefined ? {} : { signal }),
+    })
+  }
+
   async wikiFolders(signal?: AbortSignal): Promise<WikiFolder[]> {
     return await this.request<WikiFolder[]>('/api/wiki/folders', signal === undefined ? {} : { signal })
+  }
+
+  async createWikiFolder(input: CreateWikiFolderInput, signal?: AbortSignal): Promise<WikiFolder> {
+    return await this.request<WikiFolder>('/api/wiki/folders', {
+      body: JSON.stringify(input),
+      headers: { 'content-type': 'application/json' },
+      method: 'POST',
+      ...(signal === undefined ? {} : { signal }),
+    })
+  }
+
+  async updateWikiFolder(id: string, input: UpdateWikiFolderInput, signal?: AbortSignal): Promise<WikiFolder> {
+    return await this.request<WikiFolder>(`/api/wiki/folders/${encodeURIComponent(id)}`, {
+      body: JSON.stringify(input),
+      headers: { 'content-type': 'application/json' },
+      method: 'PUT',
+      ...(signal === undefined ? {} : { signal }),
+    })
+  }
+
+  async deleteWikiFolder(id: string, signal?: AbortSignal): Promise<{ ok: true }> {
+    return await this.request<{ ok: true }>(`/api/wiki/folders/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      ...(signal === undefined ? {} : { signal }),
+    })
   }
 
   async wikiPage(id: string, signal?: AbortSignal): Promise<WikiPage> {
@@ -578,6 +627,15 @@ export class ConnectionService extends Service {
 
   async updateUrlExtractedContent(documentId: string, input: UpdateKnowledgeUrlExtractedContentInput, signal?: AbortSignal): Promise<KnowledgeDocument> {
     return await this.request<KnowledgeDocument>(`/api/documents/${encodeURIComponent(documentId)}/url-content`, {
+      body: JSON.stringify(input),
+      headers: { 'content-type': 'application/json' },
+      method: 'PUT',
+      ...(signal === undefined ? {} : { signal }),
+    })
+  }
+
+  async updatePdfOcr(documentId: string, input: UpdateKnowledgePdfOcrInput, signal?: AbortSignal): Promise<KnowledgeDocument> {
+    return await this.request<KnowledgeDocument>(`/api/documents/${encodeURIComponent(documentId)}/pdf-ocr`, {
       body: JSON.stringify(input),
       headers: { 'content-type': 'application/json' },
       method: 'PUT',

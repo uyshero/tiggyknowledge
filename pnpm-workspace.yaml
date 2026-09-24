@@ -19,6 +19,7 @@ allowBuilds:
   esbuild: true
   node-pty: true
   node-addon-require-builtin: false
+  tesseract.js: true
 
 minimumReleaseAgeExclude:
   - react-pdf@10.5.0
