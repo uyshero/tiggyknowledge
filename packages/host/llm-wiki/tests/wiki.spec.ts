@@ -9,12 +9,32 @@ import TextPreview from '@tiggyknowledge/preview-text'
 import FileSettings from '@tiggyknowledge/settings-file'
 import WikiSqlite from '@tiggyknowledge/wiki-sqlite'
 import { describe, expect, it, vi } from 'vitest'
-import LlmWiki from '../src/index.ts'
+import LlmWiki, { packSegmentSummaries, parseSegmentSummaries, splitDocumentForModel } from '../src/index.ts'
 
 describe('LLM Wiki generation', () => {
+  it('splits long documents without dropping content', () => {
+    const content = Array.from({ length: 40 }, (_, index) => `第${index + 1}段：${'全文内容'.repeat(500)}\n\n`).join('')
+    const chunks = splitDocumentForModel(content, 4_000)
+    expect(chunks.length).toBeGreaterThan(1)
+    expect(chunks.join('')).toBe(content)
+    expect(chunks.every(chunk => chunk.length <= 12_002)).toBe(true)
+  })
+
+  it('packs every complete segment into synthesis batches without truncation', () => {
+    const summary = Array.from({ length: 40 }, (_, index) => `## 第 ${index + 1}/40 段\n${`要点${index + 1}`.repeat(100)}`).join('\n\n')
+    const parts = parseSegmentSummaries(summary)
+    const batches = packSegmentSummaries(parts, 4_000)
+    expect(batches.length).toBeGreaterThan(1)
+    expect(batches.every(batch => batch.join('\n\n').length <= 4_000)).toBe(true)
+    expect(batches.flat()).toEqual(parts)
+    expect(batches.at(-1)?.at(-1)).toContain('## 第 40/40 段')
+  })
+
   it('confirms one document at a time and generates a cited page in the background', async () => {
     const dataDir = mkdtempSync(join(tmpdir(), 'tiggyknowledge-llm-wiki-'))
     const ctx = new Context()
+    let assistDocumentId = ''
+    let assistLibraryId = ''
     const complete = vi.fn()
       .mockResolvedValueOnce({ content: '这是一篇测试文档的摘要。', inputTokens: 20, outputTokens: 8 })
       .mockResolvedValueOnce({ content: '{"pages":[', inputTokens: 1, outputTokens: 4_000 })
@@ -59,6 +79,26 @@ describe('LLM Wiki generation', () => {
       encrypt: value => Buffer.from(value).toString('base64'),
       decrypt: value => Buffer.from(value, 'base64').toString(),
     })
+      ctx.provide('knowledgeQuery', {
+        search: input => ({
+          query: input.text,
+          mode: 'keyword',
+          total: assistDocumentId === '' ? 0 : 1,
+          results: assistDocumentId === '' ? [] : [{
+            chunkId: `${assistDocumentId}:0`,
+            knowledgeBaseId: assistLibraryId,
+            documentId: assistDocumentId,
+            title: '测试文档',
+            originalName: 'test.md',
+            sourceType: 'markdown',
+            location: '第 1 段',
+            snippet: '手动词条用于测试知识库依据。',
+            score: 1,
+            tags: [],
+            isFavorite: false,
+          }],
+        }),
+      })
     try {
       await ctx.plugin(CatalogSqlite, { dataDir })
       await ctx.plugin(ContentLocal, { dataDir })
@@ -109,6 +149,8 @@ describe('LLM Wiki generation', () => {
         contentHash: asset.contentHash,
         sizeBytes: asset.sizeBytes,
       })
+      assistDocumentId = document.id
+      assistLibraryId = library.id
 
       expect(ctx.llmWiki.status().inbox).toEqual([expect.objectContaining({
         documentId: document.id,
@@ -183,7 +225,14 @@ describe('LLM Wiki generation', () => {
         summary: '手动词条的简明摘要。',
         sectionTitle: '解释',
         body: expect.stringContaining('AI 补充'),
+        sourceDocumentIds: [document.id],
       })
+      const assistPayload = JSON.parse(complete.mock.calls.at(-1)?.[0].messages.at(-1)?.content ?? '{}') as {
+        knowledgeEvidence?: Array<{ documentId: string, snippet: string }>
+      }
+      expect(assistPayload.knowledgeEvidence).toEqual([
+        expect.objectContaining({ documentId: document.id, snippet: expect.stringContaining('知识库依据') }),
+      ])
       const manual = ctx.llmWiki.createPage({
         title: '手动词条',
         pageType: 'event',
@@ -192,12 +241,20 @@ describe('LLM Wiki generation', () => {
         purpose: assisted.purpose,
         questions: assisted.questions,
         sectionTitle: assisted.sectionTitle,
+        sourceDocumentIds: assisted.sourceDocumentIds,
         body: assisted.body,
       })
-      expect(manual).toMatchObject({ title: '手动词条', pageType: 'event', folderId: category.id, state: 'locked', lastEditSource: 'user' })
+      expect(manual).toMatchObject({
+        title: '手动词条',
+        pageType: 'event',
+        folderId: category.id,
+        state: 'locked',
+        lastEditSource: 'user',
+        sections: [{ sources: [{ documentId: document.id }] }],
+      })
       ctx.llmWiki.deleteFolder(category.id)
       expect(ctx.llmWiki.page(manual.id).folderId).toBeUndefined()
-      expect(() => ctx.llmWiki.start({ documentId: document.id })).toThrow('该文章对应的词条已是最新')
+      expect(() => ctx.llmWiki.start({ documentId: document.id })).toThrow('该词条已锁定')
       expect(complete).toHaveBeenCalledTimes(4)
     } finally {
       await ctx.fiber.dispose()
@@ -253,6 +310,9 @@ describe('LLM Wiki generation', () => {
       await ctx.plugin(LlmCredentials, { dataDir })
       await ctx.plugin(WikiSqlite, { dataDir })
       ctx.provide('llmClient', { complete })
+      ctx.provide('knowledgeQuery', {
+        search: input => ({ query: input.text, mode: 'keyword', total: 0, results: [] }),
+      })
       await ctx.plugin(LlmWiki)
       ctx.settings.updateLlmIntegration({
         providers: [{

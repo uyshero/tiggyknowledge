@@ -32,6 +32,7 @@ import type { ChatCompletionResult } from '@tiggyknowledge/llm-client'
 import type {} from '@tiggyknowledge/llm-client'
 import type {} from '@tiggyknowledge/llm-credentials'
 import type {} from '@tiggyknowledge/preview-text'
+import type {} from '@tiggyknowledge/query'
 import type {} from '@tiggyknowledge/settings-file'
 import { contributeSurface } from '@tiggyknowledge/plugin-surface'
 import type { WikiDocumentSnapshot, WikiFolderWrite, WikiPageWrite } from '@tiggyknowledge/wiki-sqlite'
@@ -75,10 +76,13 @@ interface GeneratedSection {
   sourceDocumentIds?: unknown
 }
 
+const FULL_SUMMARY_MARKER = '<!-- wiki-summary:full-v2 -->'
+
 export class LlmWiki extends Service {
   static inject = [
     'knowledgeCatalog',
     'knowledgePreview',
+    'knowledgeQuery',
     'llmClient',
     'llmCredentials',
     'settings',
@@ -334,6 +338,10 @@ export class LlmWiki extends Service {
     const existingSlugs = new Set(this.ctx.wikiStorage.listPages().map(item => item.slug))
     const slug = uniqueSlug(normalizeWikiSlug(undefined, title, type), existingSlugs)
     const body = text(input.body, '词条正文', 1, 200_000)
+    const sourceDocumentIds = sourceIds(input.sourceDocumentIds)
+    if (sourceDocumentIds.length > 20) throw new RangeError('来源文档最多 20 个')
+    const sourceDocuments = this.ctx.knowledgeCatalog.getDocuments(sourceDocumentIds)
+    if (sourceDocuments.length !== sourceDocumentIds.length) throw new RangeError('部分来源文档已不存在，请重新使用 AI 补充')
     return this.ctx.wikiStorage.createPage({
       id: randomUUID(),
       slug,
@@ -353,7 +361,7 @@ export class LlmWiki extends Service {
         body,
         order: 0,
         state: 'locked',
-        sources: [],
+        sources: sourceDocuments.map(wikiSource),
       }],
     })
   }
@@ -363,6 +371,20 @@ export class LlmWiki extends Service {
     const type = input.pageType === undefined ? 'concept' : pageType(input.pageType)
     if (type === 'index') throw new RangeError('Wiki 首页不能使用词条补充')
     const notes = input.notes === undefined ? '' : text(input.notes, '补充线索', 0, 5_000)
+    const queries = [title, ...(notes === '' ? [] : [`${title} ${notes}`.slice(0, 200)])]
+    const evidenceByChunk = new Map<string, ReturnType<typeof this.ctx.knowledgeQuery.search>['results'][number]>()
+    for (const query of queries) {
+      const search = this.ctx.knowledgeQuery.search({
+        text: query,
+        knowledgeBaseIds: [],
+        mode: 'keyword',
+        topK: 10,
+      })
+      for (const item of search.results) if (!evidenceByChunk.has(item.chunkId)) evidenceByChunk.set(item.chunkId, item)
+    }
+    const evidence = [...evidenceByChunk.values()].slice(0, 12)
+    if (evidence.length === 0) throw new RangeError(`知识库文件中没有找到与“${title}”相关的内容，请先导入资料或补充更准确的线索`)
+    const sourceDocumentIds = [...new Set(evidence.map(item => item.documentId))]
     const result = await this.ctx.llmClient.complete({
       settings: this.wikiEndpoint(),
       temperature: 0.2,
@@ -375,8 +397,9 @@ export class LlmWiki extends Service {
             '你是 Wiki 词条编辑助手。用户给出一个人物、组织、地点、产品、项目、术语、概念、决策或事件名称，请生成一份可继续编辑的中文解释草稿。',
             '只输出 JSON：{"summary":"不超过80字","purpose":"这个词条的用途","questions":["最多3个问题"],"sectionTitle":"说明","body":"Markdown 正文"}。',
             '正文应先给出清晰定义，再说明背景、关键特征、影响或与相关概念的区别。',
-            '对不确定、存在歧义或时效性强的信息要明确说明，不能编造具体数字、日期、人物经历或事件细节。',
-            '用户提供的线索优先于通用知识。不要输出来源不存在的引用，不要输出思考过程。',
+            '必须以输入中的 knowledgeEvidence 为事实依据；资料没有写明的内容要明确说明“知识库资料未说明”，不得用模型记忆补充具体事实。',
+            '引用时只能使用 knowledgeEvidence 中已有的文件标题和位置，格式为【文件标题 · 位置】；正文末尾列出“依据”小节。',
+            '用户提供的线索用于检索和组织内容，但不能覆盖知识库文件中的事实。不要输出思考过程。',
           ].join('\n'),
         },
         {
@@ -385,6 +408,13 @@ export class LlmWiki extends Service {
             title,
             pageType: type,
             notes: notes || null,
+            knowledgeEvidence: evidence.map(item => ({
+              documentId: item.documentId,
+              title: item.title,
+              originalName: item.originalName,
+              location: item.location,
+              snippet: item.snippet,
+            })),
           }),
         },
       ],
@@ -396,6 +426,7 @@ export class LlmWiki extends Service {
       questions: generatedQuestions(parsed.questions),
       sectionTitle: text(parsed.sectionTitle ?? '说明', '章节标题', 1, 200),
       body: text(parsed.body, '词条正文', 1, 200_000),
+      sourceDocumentIds,
     }
   }
 
@@ -520,34 +551,55 @@ export class LlmWiki extends Service {
       let generation = this.ctx.wikiStorage.updateGeneration(id, { state: 'running', phase: `summarizing:${document.id}` })
       this.throwIfCancelled(id, controller.signal)
       const preview = await this.ctx.knowledgePreview.preview(document.id)
-      const cached = this.ctx.wikiStorage.cachedSummary(document.id, document.contentHash)
-      if (cached === undefined) {
-        const result = await this.ctx.llmClient.complete({
-          settings,
-          signal: controller.signal,
-          temperature: 0.1,
-          maxAttempts: 3,
-          messages: [
-            {
-              role: 'system',
-              content: [
-                '你是知识库编辑。请概括文档的核心事实、术语、流程和约束，保留可验证细节。',
-                '若文中出现但未展开的概念、制度或专有名词，请在摘要里单独点出，便于后续写成可读词条。',
-                '只输出摘要正文。',
-              ].join('\n'),
-            },
-            {
-              role: 'user',
-              content: `文档 ID: ${document.id}\n标题: ${document.title}\n\n${truncateForModel(preview.content, settings.maxInputTokens)}`,
-            },
-          ],
-        })
-        this.ctx.wikiStorage.saveDocumentSummary(snapshot(document), result.content.trim())
-        generation = this.addUsage(generation, result)
+      const chunks = splitDocumentForModel(preview.content, settings.maxInputTokens)
+      generation = this.ctx.wikiStorage.updateGeneration(id, { totalSteps: chunks.length + 1 })
+      const cachedValue = this.ctx.wikiStorage.cachedSummary(document.id, document.contentHash)
+      const cachedCoversFullDocument = cachedValue !== undefined
+        && (chunks.length === 1 || cachedValue.startsWith(FULL_SUMMARY_MARKER))
+      let summary = cachedCoversFullDocument
+        ? cachedValue.replace(FULL_SUMMARY_MARKER, '').trim()
+        : ''
+      if (!cachedCoversFullDocument) {
+        const summaries: string[] = []
+        for (const [index, chunk] of chunks.entries()) {
+          this.throwIfCancelled(id, controller.signal)
+          generation = this.ctx.wikiStorage.updateGeneration(id, {
+            phase: `summarizing:${index + 1}/${chunks.length}`,
+            completedSteps: index,
+          })
+          const result = await this.ctx.llmClient.complete({
+            settings,
+            signal: controller.signal,
+            temperature: 0.1,
+            maxAttempts: 3,
+            messages: [
+              {
+                role: 'system',
+                content: [
+                  '你是知识库编辑，正在逐段遍历一篇长文。',
+                  '请提取本段全部重要事实、数字、术语、专有名词、新词、人物、组织、项目、决策和事件，保留可验证细节。',
+                  '对于事件注明时间、参与者、原因和影响（原文有写时）；不要因为追求简短而漏掉候选词条。',
+                  '按要点组织，控制在 1200 个中文字符以内。',
+                  '只输出本段结构化摘要正文，不要补充原文没有的具体事实。',
+                ].join('\n'),
+              },
+              {
+                role: 'user',
+                content: `文档 ID: ${document.id}\n标题: ${document.title}\n全文分段: ${index + 1}/${chunks.length}\n\n${chunk}`,
+              },
+            ],
+          })
+          summaries.push(`## 第 ${index + 1}/${chunks.length} 段\n${result.content.trim()}`)
+          generation = this.addUsage(generation, result)
+          generation = this.ctx.wikiStorage.updateGeneration(id, { completedSteps: index + 1 })
+        }
+        summary = summaries.join('\n\n')
+        this.ctx.wikiStorage.saveDocumentSummary(snapshot(document), `${FULL_SUMMARY_MARKER}\n${summary}`)
+      } else {
+        generation = this.ctx.wikiStorage.updateGeneration(id, { completedSteps: chunks.length })
       }
-      generation = this.ctx.wikiStorage.updateGeneration(id, { completedSteps: 1, phase: 'synthesizing' })
+      generation = this.ctx.wikiStorage.updateGeneration(id, { phase: 'synthesizing' })
       this.throwIfCancelled(id, controller.signal)
-      const summary = this.ctx.wikiStorage.cachedSummary(document.id, document.contentHash) ?? ''
       const libraryName = this.ctx.knowledgeCatalog.listLibraries().find(library => library.id === document.libraryId)?.name ?? '未分组'
       const existing = this.ctx.wikiStorage.pagesForDocument(document.id).filter(page => page.pageType !== 'index')
       if (existing.some(page => page.state === 'locked')) throw new RangeError('该词条已锁定；该文章关联的词条需先全部允许自动更新')
@@ -562,72 +614,74 @@ export class LlmWiki extends Service {
           sections: value.sections.map(section => ({ title: section.title, body: section.body })),
         }]
       })
-      const synthesisInput = truncateForModel(JSON.stringify({
+      const existingPagesForPrompt = existingPages.map(page => ({
+        slug: page.slug,
+        title: page.title,
+        pageType: page.pageType,
+        summary: page.summary,
+        purpose: page.purpose,
+      }))
+      const existingCategories = this.ctx.wikiStorage.listFolders().map(folder => folder.path)
+      const synthesisDocument = {
+        documentId: document.id,
+        libraryId: document.libraryId,
+        libraryName,
+        title: document.title,
+        contentHash: document.contentHash,
+        ...(chunks.length === 1
+          ? { content: preview.content }
+          : { contentCoverage: `全文已按 ${chunks.length} 段逐段摘要；summary 覆盖全部分段。` }),
+      }
+      const maxSynthesisCharacters = modelCharacterLimit(settings.maxInputTokens)
+      const synthesisEnvelope = (summaryValue: string, batchIndex: number, batchTotal: number): string => JSON.stringify({
         document: {
-          documentId: document.id,
-          libraryId: document.libraryId,
-          libraryName,
-          title: document.title,
-          contentHash: document.contentHash,
-          summary,
-          content: preview.content,
+          ...synthesisDocument,
+          summary: summaryValue,
+          ...(batchTotal > 1 ? { synthesisBatch: `${batchIndex}/${batchTotal}` } : {}),
         },
-        existingPages,
-        existingCategories: this.ctx.wikiStorage.listFolders().map(folder => folder.path),
-      }), settings.maxInputTokens)
-      let synthesis = await this.ctx.llmClient.complete({
-        settings: {
-          ...settings,
-          requestTimeoutMs: Math.max(settings.requestTimeoutMs, 180_000),
-        },
-        signal: controller.signal,
-        temperature: 0.2,
-        json: true,
-        maxAttempts: 3,
-        messages: [
-          {
-            role: 'system',
-            content: [
-              '你是 Wiki 编辑。不要把整篇文章改写成一个词条。请提取文章中最关键、值得长期检索和独立解释的人物、组织、地点、产品、项目、术语、概念、制度、流程、决策和事件，分别生成词条。',
-              '提取优先级：新出现或反复出现的专有名词与新词 > 明确命名的人物、组织、产品和项目 > 有时间、参与者、原因或影响的事件与决策 > 普通背景概念。',
-              '只保留有稳定名称、包含可验证事实或对理解知识库重要的对象；忽略泛词、一次性措辞、文章标题和仅有一句带过的次要对象。通常生成 2 到 8 个词条，信息不足时可以更少。',
-              '只输出 JSON：{"pages":[{"title":"...","slug":"entity/example","summary":"不超过80字","pageType":"entity","aliases":[],"purpose":"...","questions":["..."],"folderPath":["人物"],"parentSlug":null,"sections":[{"title":"...","body":"Markdown","sourceDocumentIds":["文档ID"]}]}]}。',
-              'pageType 只能是 entity、concept、glossary、project、policy、procedure、decision、event、topic。',
-              '必须且只能使用输入中的这一篇文档 ID 作为 sourceDocumentIds。',
-              '优先使用 existingCategories 中合适的分类；没有合适分类时，使用人物、组织、地点、产品与项目、术语与概念、制度与规则、流程与操作、决策、事件之一。',
-              '如果对象与 existingPages 中词条相同，必须沿用其 slug 并更新内容，避免重复词条。',
-              '词条要让没读过原文的人也能看懂。原文写明的事实、数字、结论必须忠实保留，不得编造文中没有的数据、日期、人名或决策。',
-              '可以用通用知识补全简明解释，但必须与原文事实清楚区分，不得杜撰具体信息。',
-              '不要写 Wiki 首页，不要写主题导航，不要输出思考过程。每页 1 到 3 个章节。',
-            ].join('\n'),
-          },
-          { role: 'user', content: synthesisInput },
-        ],
+        existingPages: existingPagesForPrompt,
+        existingCategories,
       })
-      generation = this.addUsage(generation, synthesis)
-      this.throwIfCancelled(id, controller.signal)
-      let parsedPages: PlannedPage[]
-      try {
-        parsedPages = this.parsePages(synthesis.content, [document])
-      } catch (error) {
-        if (!(error instanceof Error) || !error.message.includes('JSON')) throw error
-        generation = this.ctx.wikiStorage.updateGeneration(id, { phase: 'synthesizing:compact-retry' })
-        synthesis = await this.ctx.llmClient.complete({
+      const summaryParts = chunks.length === 1 ? [summary] : parseSegmentSummaries(summary)
+      const emptyEnvelopeLength = synthesisEnvelope('', summaryParts.length, summaryParts.length).length
+      const summaryBudget = maxSynthesisCharacters - emptyEnvelopeLength - 256
+      if (summaryBudget < 512) {
+        throw new RangeError('现有词条信息过多，无法在模型输入上限内安全合成')
+      }
+      const summaryBatches = packSegmentSummaries(summaryParts, summaryBudget)
+      generation = this.ctx.wikiStorage.updateGeneration(id, { totalSteps: chunks.length + summaryBatches.length })
+      const batchPages: PlannedPage[] = []
+      for (const [batchIndex, batch] of summaryBatches.entries()) {
+        this.throwIfCancelled(id, controller.signal)
+        generation = this.ctx.wikiStorage.updateGeneration(id, {
+          phase: summaryBatches.length === 1 ? 'synthesizing' : `synthesizing:${batchIndex + 1}/${summaryBatches.length}`,
+          completedSteps: chunks.length + batchIndex,
+        })
+        const synthesisInput = synthesisEnvelope(batch.join('\n\n'), batchIndex + 1, summaryBatches.length)
+        let synthesis = await this.ctx.llmClient.complete({
           settings: {
             ...settings,
             requestTimeoutMs: Math.max(settings.requestTimeoutMs, 180_000),
           },
           signal: controller.signal,
-          temperature: 0.1,
+          temperature: 0.2,
           json: true,
-          maxAttempts: 2,
+          maxAttempts: 3,
           messages: [
             {
               role: 'system',
               content: [
-                '上一次 Wiki JSON 被截断。请返回紧凑且完整的 {"pages":[...]}。',
-                '只保留最关键的 2 到 5 个人物、组织、地点、项目、概念、决策或事件词条，每页 1 到 2 个章节。',
-                '每个章节不超过 500 个中文字符。来源 ID 必须是输入中的文档。不得编造文中没有的具体事实。',
+                '你是 Wiki 编辑。不要把整篇文章改写成一个词条。请提取文章中最关键、值得长期检索和独立解释的人物、组织、地点、产品、项目、术语、概念、制度、流程、决策和事件，分别生成词条。',
+                '提取优先级：新出现或反复出现的专有名词与新词 > 明确命名的人物、组织、产品和项目 > 有时间、参与者、原因或影响的事件与决策 > 普通背景概念。',
+                '只保留有稳定名称、包含可验证事实或对理解知识库重要的对象；忽略泛词、一次性措辞、文章标题和仅有一句带过的次要对象。通常生成 2 到 8 个词条，信息不足时可以更少。',
+                '只输出 JSON：{"pages":[{"title":"...","slug":"entity/example","summary":"不超过80字","pageType":"entity","aliases":[],"purpose":"...","questions":["..."],"folderPath":["人物"],"parentSlug":null,"sections":[{"title":"...","body":"Markdown","sourceDocumentIds":["文档ID"]}]}]}。',
+                'pageType 只能是 entity、concept、glossary、project、policy、procedure、decision、event、topic。',
+                '必须且只能使用输入中的这一篇文档 ID 作为 sourceDocumentIds。',
+                '优先使用 existingCategories 中合适的分类；没有合适分类时，使用人物、组织、地点、产品与项目、术语与概念、制度与规则、流程与操作、决策、事件之一。',
+                '如果对象与 existingPages 中词条相同，必须沿用其 slug 并更新内容，避免重复词条。',
+                '词条要让没读过原文的人也能看懂。原文写明的事实、数字、结论必须忠实保留，不得编造文中没有的数据、日期、人名或决策。',
+                '可以用通用知识补全简明解释，但必须与原文事实清楚区分，不得杜撰具体信息。',
+                '不要写 Wiki 首页，不要写主题导航，不要输出思考过程。每页 1 到 3 个章节。',
               ].join('\n'),
             },
             { role: 'user', content: synthesisInput },
@@ -635,8 +689,39 @@ export class LlmWiki extends Service {
         })
         generation = this.addUsage(generation, synthesis)
         this.throwIfCancelled(id, controller.signal)
-        parsedPages = this.parsePages(synthesis.content, [document])
+        try {
+          batchPages.push(...this.parsePages(synthesis.content, [document]))
+        } catch (error) {
+          if (!(error instanceof Error) || !error.message.includes('JSON')) throw error
+          generation = this.ctx.wikiStorage.updateGeneration(id, { phase: 'synthesizing:compact-retry' })
+          synthesis = await this.ctx.llmClient.complete({
+            settings: {
+              ...settings,
+              requestTimeoutMs: Math.max(settings.requestTimeoutMs, 180_000),
+            },
+            signal: controller.signal,
+            temperature: 0.1,
+            json: true,
+            maxAttempts: 2,
+            messages: [
+              {
+                role: 'system',
+                content: [
+                  '上一次 Wiki JSON 被截断。请返回紧凑且完整的 {"pages":[...]}。',
+                  '只保留最关键的 2 到 5 个人物、组织、地点、项目、概念、决策或事件词条，每页 1 到 2 个章节。',
+                  '每个章节不超过 500 个中文字符。来源 ID 必须是输入中的文档。不得编造文中没有的具体事实。',
+                ].join('\n'),
+              },
+              { role: 'user', content: synthesisInput },
+            ],
+          })
+          generation = this.addUsage(generation, synthesis)
+          this.throwIfCancelled(id, controller.signal)
+          batchPages.push(...this.parsePages(synthesis.content, [document]))
+        }
+        generation = this.ctx.wikiStorage.updateGeneration(id, { completedSteps: chunks.length + batchIndex + 1 })
       }
+      const parsedPages = mergePlannedPagesBySlug(batchPages)
       if (parsedPages.length === 0) throw new Error('LLM 未生成词条')
       const availableCategoryPaths = new Set(this.ctx.wikiStorage.listFolders().map(folder => folder.path))
       const generated = parsedPages.filter(page => page.pageType !== 'index').map(page => ({
@@ -675,7 +760,7 @@ export class LlmWiki extends Service {
       this.ctx.wikiStorage.updateGeneration(id, {
         state: 'completed',
         phase: 'completed',
-        completedSteps: 2,
+        completedSteps: chunks.length + summaryBatches.length,
         completedAt: new Date().toISOString(),
       })
     } catch (error) {
@@ -1050,10 +1135,96 @@ function uniqueSlug(base: string, used: Set<string>): string {
   return slug
 }
 
-function truncateForModel(content: string, maxTokens: number): string {
-  const maxCharacters = Math.max(4_000, maxTokens * 4)
-  if (content.length <= maxCharacters) return content
-  return `${content.slice(0, maxCharacters)}\n\n[内容已截断]`
+function modelCharacterLimit(maxTokens: number): number {
+  return Math.max(4_000, maxTokens * 4)
+}
+
+export function parseSegmentSummaries(summary: string): string[] {
+  const matches = [...summary.matchAll(/^## 第 (\d+)\/(\d+) 段\s*$/gm)]
+  if (matches.length === 0) return summary.trim() === '' ? [] : [summary.trim()]
+  return matches.map((match, index) => {
+    const start = match.index ?? 0
+    const end = matches[index + 1]?.index ?? summary.length
+    return summary.slice(start, end).trim()
+  }).filter(Boolean)
+}
+
+export function packSegmentSummaries(parts: string[], maxCharacters: number): string[][] {
+  if (parts.length === 0) return [['']]
+  const batches: string[][] = []
+  let current: string[] = []
+  let currentLength = 0
+  for (const part of parts) {
+    if (part.length > maxCharacters) throw new RangeError('单段摘要超过模型输入上限，请提高模型输入长度后重试')
+    const separator = current.length === 0 ? 0 : 2
+    if (current.length > 0 && currentLength + separator + part.length > maxCharacters) {
+      batches.push(current)
+      current = []
+      currentLength = 0
+    }
+    current.push(part)
+    currentLength += (current.length === 1 ? 0 : 2) + part.length
+  }
+  if (current.length > 0) batches.push(current)
+  return batches
+}
+
+function mergePlannedPagesBySlug(pages: PlannedPage[]): PlannedPage[] {
+  const merged = new Map<string, PlannedPage>()
+  for (const page of pages) {
+    const current = merged.get(page.slug)
+    if (current === undefined) {
+      merged.set(page.slug, page)
+      continue
+    }
+    const sections = [...current.sections]
+    for (const section of page.sections) {
+      const existing = sections.find(item => item.title === section.title)
+      if (existing === undefined) {
+        sections.push({ ...section, order: sections.length })
+        continue
+      }
+      if (section.body !== existing.body && !existing.body.includes(section.body)) {
+        existing.body = `${existing.body}\n\n${section.body}`
+      }
+      existing.sources = [...existing.sources, ...section.sources.filter(source =>
+        !existing.sources.some(item => item.documentId === source.documentId))]
+    }
+    const mergedSummary = (page.summary?.length ?? 0) > (current.summary?.length ?? 0) ? page.summary : current.summary
+    const mergedPurpose = (page.purpose?.length ?? 0) > (current.purpose?.length ?? 0) ? page.purpose : current.purpose
+    merged.set(page.slug, {
+      ...current,
+      ...(mergedSummary === undefined ? {} : { summary: mergedSummary }),
+      ...(mergedPurpose === undefined ? {} : { purpose: mergedPurpose }),
+      aliases: [...new Set([...(current.aliases ?? []), ...(page.aliases ?? [])])],
+      questions: [...new Set([...(current.questions ?? []), ...(page.questions ?? [])])],
+      sections,
+    })
+  }
+  return [...merged.values()].map((page, order) => ({ ...page, order }))
+}
+
+export function splitDocumentForModel(content: string, maxTokens: number): string[] {
+  const maxCharacters = Math.min(120_000, Math.max(12_000, Math.floor(maxTokens * 3)))
+  if (content.length <= maxCharacters) return [content]
+  const chunks: string[] = []
+  let cursor = 0
+  while (cursor < content.length) {
+    const target = Math.min(content.length, cursor + maxCharacters)
+    if (target === content.length) {
+      chunks.push(content.slice(cursor))
+      break
+    }
+    const minimumBoundary = cursor + Math.floor(maxCharacters * 0.7)
+    const pageBoundary = content.lastIndexOf('\f', target)
+    const paragraphBoundary = content.lastIndexOf('\n\n', target)
+    const lineBoundary = content.lastIndexOf('\n', target)
+    const boundary = Math.max(pageBoundary, paragraphBoundary, lineBoundary)
+    const end = boundary >= minimumBoundary ? boundary + (boundary === pageBoundary ? 1 : boundary === paragraphBoundary ? 2 : 1) : target
+    chunks.push(content.slice(cursor, end))
+    cursor = end
+  }
+  return chunks
 }
 
 function text(value: unknown, label: string, minimum: number, maximum: number): string {
@@ -1128,6 +1299,8 @@ function friendlyPhase(phase: string): string {
   if (phase === 'planning:compact-retry') return '紧凑重试词条规划'
   if (phase === 'synthesizing') return '生成 Wiki 页面'
   if (phase === 'synthesizing:compact-retry') return '紧凑重试 Wiki 页面'
+  const synthesisBatch = /^synthesizing:(\d+)\/(\d+)$/.exec(phase)
+  if (synthesisBatch !== null) return `分批生成 Wiki 页面 ${synthesisBatch[1]}/${synthesisBatch[2]}`
   if (phase.startsWith('summarizing:')) return `摘要文档 ${phase.slice('summarizing:'.length)}`
   if (phase === 'scanning') return '扫描知识库'
   return phase

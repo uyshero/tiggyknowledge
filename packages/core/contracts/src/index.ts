@@ -494,6 +494,23 @@ export interface MineruPdfOcrResult {
   truncated: boolean
 }
 
+export type MineruPdfOcrJobState = 'queued' | 'running' | 'completed' | 'failed'
+export type MineruPdfOcrJobPhase = 'queued' | 'validating' | 'uploading' | 'extracting' | 'downloading' | 'indexing' | 'completed' | 'failed'
+
+export interface MineruPdfOcrJob {
+  id: string
+  documentId: string
+  state: MineruPdfOcrJobState
+  phase: MineruPdfOcrJobPhase
+  progress: number
+  extractedPages?: number
+  totalPages?: number
+  result?: MineruPdfOcrResult
+  error?: string
+  createdAt: string
+  updatedAt: string
+}
+
 export const DEFAULT_LLM_BASE_URL = 'https://api.openai.com/v1'
 export const DEFAULT_LLM_REQUEST_TIMEOUT_MS = 120_000
 export const DEFAULT_LLM_MAX_INPUT_TOKENS = 32_000
@@ -864,6 +881,7 @@ export interface CreateWikiPageInput {
   purpose?: string
   questions?: string[]
   sectionTitle?: string
+  sourceDocumentIds?: string[]
   body: string
 }
 
@@ -879,6 +897,7 @@ export interface AssistWikiPageResult {
   questions: string[]
   sectionTitle: string
   body: string
+  sourceDocumentIds: string[]
 }
 
 export interface CreateWikiFolderInput {

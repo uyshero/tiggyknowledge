@@ -71,25 +71,33 @@
 .wiki-progress span { display: block; height: 100%; border-radius: inherit; background: #666d69; transition: width 250ms ease; }
 .wiki-progress-meta { display: flex; width: min(460px, 80vw); justify-content: space-between; margin: 7px 0 18px; color: #858c87; font-size: 10px; }
 .wiki-workbench { display: grid; min-height: 620px; flex: 1; grid-template-columns: 220px minmax(360px, 1fr) 260px; }
+.wiki-workbench.tree-collapsed { grid-template-columns: 48px minmax(360px, 1fr) 260px; }
 .wiki-tree { min-width: 0; border-right: 1px solid #e4e7e5; background: #fafbfa; padding: 0 8px 20px; }
-.wiki-pane-title { height: 42px; padding: 15px 7px 0; color: #858c87; font-size: 10px; font-weight: 650; text-transform: uppercase; }
+.wiki-pane-title { display: flex; height: 42px; align-items: center; justify-content: space-between; gap: 6px; padding: 7px; color: #858c87; font-size: 10px; font-weight: 650; text-transform: uppercase; }
+.wiki-tree .wiki-pane-title > button { display: grid; width: 26px; height: 26px; flex: 0 0 26px; place-items: center; padding: 0; color: #6f7772; }
+.wiki-tree.collapsed { padding-inline: 7px; }
+.wiki-tree.collapsed .wiki-pane-title { justify-content: center; padding-inline: 0; }
+.wiki-tree.collapsed .wiki-pane-title > span { display: none; }
+.wiki-tree-collapsed-label { display: block; margin: 8px auto 0; color: #68716b; font-size: 10px; font-weight: 650; letter-spacing: .12em; line-height: 1.35; text-align: center; writing-mode: vertical-rl; }
 .wiki-tree button { display: flex; width: 100%; height: 34px; min-width: 0; align-items: center; gap: 5px; padding-right: 8px; border: 0; border-radius: 5px; background: transparent; color: #535b56; font-size: 11px; text-align: left; cursor: pointer; }
 .wiki-tree button:hover { background: #edf0ee; }
 .wiki-tree button.active { background: #e2e4e3; color: #2f3331; font-weight: 600; }
 .wiki-tree button svg { flex: 0 0 auto; }
 .wiki-tree button span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.wiki-tree button em { flex: 0 0 auto; margin-left: auto; color: #8a6a2a; font-size: 9px; font-style: normal; font-weight: 650; }
+.wiki-tree button .wiki-tree-item-title { min-width: 50px; flex: 1 1 auto; }
+.wiki-tree button .wiki-tree-badges { display: flex; overflow: visible; flex: 0 0 auto; align-items: center; gap: 5px; margin-left: auto; }
+.wiki-tree button em { flex: 0 0 auto; color: #8a6a2a; font-size: 9px; font-style: normal; font-weight: 650; }
 .wiki-editor-section-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: end; }
-.wiki-tree button i { width: 6px; height: 6px; flex: 0 0 auto; margin-left: auto; border-radius: 50%; background: #b47a27; }
-.wiki-folder { display: flex; height: 32px; align-items: center; gap: 6px; color: #737b76; font-size: 10px; font-weight: 650; }
+.wiki-tree button i { width: 6px; height: 6px; flex: 0 0 auto; border-radius: 50%; background: #b47a27; }
+.wiki-folder { display: flex; height: 32px; min-width: 0; align-items: center; gap: 6px; color: #737b76; font-size: 10px; font-weight: 650; }
 .wiki-folder svg { flex: 0 0 auto; color: #929994; }
-.wiki-folder span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wiki-folder span { min-width: 0; overflow: hidden; flex: 1 1 auto; text-overflow: ellipsis; white-space: nowrap; }
 .wiki-content { min-width: 0; padding: 30px clamp(24px, 5vw, 70px) 70px; }
-.wiki-content > header { display: flex; min-width: 0; align-items: center; justify-content: space-between; gap: 16px; padding-bottom: 20px; border-bottom: 1px solid #e8ebe9; }
+.wiki-content > header { display: flex; min-width: 0; align-items: flex-start; flex-direction: column; gap: 14px; padding-bottom: 20px; border-bottom: 1px solid #e8ebe9; }
 .wiki-page-heading { min-width: 0; flex: 1 1 auto; }
-.wiki-content > header h1 { margin: 0 0 6px; color: #252927; font-size: 24px; line-height: 1.3; overflow-wrap: break-word; word-break: break-word; }
+.wiki-content > header h1 { display: -webkit-box; max-width: 100%; margin: 0 0 6px; overflow: hidden; color: #252927; font-size: 24px; line-height: 1.3; overflow-wrap: break-word; word-break: break-word; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .wiki-content > header span { display: block; overflow: hidden; color: #858c87; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
-.wiki-page-actions { display: flex; flex: 0 0 auto; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 8px; }
+.wiki-page-actions { display: flex; width: 100%; flex: 0 0 auto; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: 8px; }
 .wiki-page-summary { margin: 18px 0 0; padding: 12px 14px; border-left: 3px solid #cbd0cd; background: #fafbfa; color: #626a65; font-size: 12px; line-height: 1.65; }
 .wiki-purpose, .wiki-questions { margin: 14px 0 0; padding: 13px 15px; border: 1px solid #e1e6e3; border-radius: 8px; background: #f7f9f8; color: #536058; }
 .wiki-purpose strong, .wiki-questions strong { color: #35483d; font-size: 12px; letter-spacing: .04em; }
@@ -180,6 +188,7 @@
 
 @media (max-width: 950px) {
   .wiki-workbench { grid-template-columns: 190px minmax(0, 1fr); }
+  .wiki-workbench.tree-collapsed { grid-template-columns: 48px minmax(0, 1fr); }
   .wiki-sources { display: none; }
 }
 
@@ -187,7 +196,12 @@
   .wiki-summary { grid-template-columns: repeat(2, 1fr); }
   .wiki-summary > div:nth-child(2) { border-right: 0; }
   .wiki-workbench { grid-template-columns: 1fr; }
+  .wiki-workbench.tree-collapsed { grid-template-columns: 1fr; }
   .wiki-tree { max-height: 210px; overflow-y: auto; border-right: 0; border-bottom: 1px solid #e4e7e5; }
+  .wiki-tree.collapsed { min-height: 48px; }
+  .wiki-tree.collapsed .wiki-pane-title { justify-content: space-between; padding-inline: 7px; }
+  .wiki-tree.collapsed .wiki-pane-title > span { display: block; }
+  .wiki-tree.collapsed .wiki-tree-collapsed-label { display: none; }
   .wiki-content { padding: 22px 16px 50px; }
   .wiki-dialog-backdrop { align-items: end; padding: 0; }
   .wiki-dialog { width: 100%; border-width: 1px 0 0; border-radius: 8px 8px 0 0; }

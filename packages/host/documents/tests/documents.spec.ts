@@ -179,6 +179,9 @@ describe('knowledge documents', () => {
         pages: ['第一页 OcrUniqueKeyword 识别结果', '第二页识别结果'],
       })).toMatchObject({ indexStatus: 'ready' })
       expect(ctx.knowledgeQuery.search({ text: 'OcrUniqueKeyword', knowledgeBaseIds: [] }).total).toBe(1)
+      const longOcr = Array.from({ length: 501 }, (_, index) => index === 500 ? '第501页 BeyondFiveHundredKeyword' : `第${index + 1}页`)
+      expect(ctx.knowledgeDocuments.updatePdfOcr(documentId, { pages: longOcr })).toMatchObject({ indexStatus: 'ready' })
+      expect(ctx.knowledgeQuery.search({ text: 'BeyondFiveHundredKeyword', knowledgeBaseIds: [] }).total).toBe(1)
       expect(() => ctx.knowledgeDocuments.updatePdfOcr(noteId, { pages: ['无效'] })).toThrow('只有 PDF 支持 OCR')
     } finally {
       await ctx.fiber.dispose()

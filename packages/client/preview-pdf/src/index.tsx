@@ -9,7 +9,7 @@ import 'react-pdf/dist/Page/TextLayer.css'
 import type {} from '@tiggyknowledge/client-connection'
 import type { DocumentPreviewRendererProps } from '@tiggyknowledge/client-runtime'
 import type {} from '@tiggyknowledge/client-runtime'
-import type { KnowledgeDocumentPreview, MineruSettings } from '@tiggyknowledge/contracts'
+import type { KnowledgeDocumentPreview, MineruPdfOcrJob, MineruSettings } from '@tiggyknowledge/contracts'
 
 export const inject = ['clientApp', 'connection']
 
@@ -22,6 +22,34 @@ function locationPage(location: string | undefined): number {
 
 function confirmDownload(name: string): boolean {
   return window.confirm(`确认下载「${name}」？\n\n点击“确定”继续下载。`)
+}
+
+function mineruProgressLabel(job: MineruPdfOcrJob): string {
+  if (job.phase === 'queued') return 'MinerU 任务已加入队列…'
+  if (job.phase === 'validating') return '正在检查 PDF…'
+  if (job.phase === 'uploading') return '正在上传 PDF 到 MinerU…'
+  if (job.phase === 'extracting') {
+    return job.totalPages === undefined
+      ? 'MinerU 正在解析文档…'
+      : `MinerU 正在解析第 ${job.extractedPages ?? 0} / ${job.totalPages} 页`
+  }
+  if (job.phase === 'downloading') return '正在下载 MinerU 解析结果…'
+  if (job.phase === 'indexing') return '正在重建检索索引…'
+  return job.phase === 'completed' ? 'MinerU OCR 完成' : 'MinerU OCR 失败'
+}
+
+async function waitForMineruPoll(signal: AbortSignal): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const onAbort = (): void => {
+      window.clearTimeout(timer)
+      reject(signal.reason ?? new DOMException('已取消', 'AbortError'))
+    }
+    const timer = window.setTimeout(() => {
+      signal.removeEventListener('abort', onAbort)
+      resolve()
+    }, 1_000)
+    signal.addEventListener('abort', onAbort, { once: true })
+  })
 }
 
 function highlightedText(content: string, location: string | undefined, query: string | undefined): ReactNode[] {
@@ -46,15 +74,19 @@ function highlightedText(content: string, location: string | undefined, query: s
 }
 
 interface PdfDocumentPreviewProps extends DocumentPreviewRendererProps {
-  saveOcr: (documentId: string, pages: string[]) => Promise<void>
+  saveOcr: (documentId: string, pages: string[], signal?: AbortSignal) => Promise<void>
   loadMineru: () => Promise<MineruSettings | undefined>
-  runMineruOcr: (documentId: string) => Promise<KnowledgeDocumentPreview>
+  runMineruOcr: (documentId: string, onProgress: (job: MineruPdfOcrJob) => void, signal: AbortSignal) => Promise<KnowledgeDocumentPreview>
 }
 
 function PdfDocumentPreview({ contentUrl, preview, targetLocation, targetQuery, saveOcr, loadMineru, runMineruOcr }: PdfDocumentPreviewProps): JSX.Element {
   const stageRef = useRef<HTMLDivElement>(null)
   const ocrWorkerRef = useRef<Awaited<ReturnType<typeof createWorker>>>()
+  const ocrSaveControllerRef = useRef<AbortController>()
   const ocrCancelledRef = useRef(false)
+  const ocrRunIdRef = useRef(0)
+  const mineruRunIdRef = useRef(0)
+  const mineruControllerRef = useRef<AbortController>()
   const [mode, setMode] = useState<'page' | 'text'>('page')
   const [pdfDocument, setPdfDocument] = useState<PDFDocumentProxy>()
   const [pageCount, setPageCount] = useState(preview.pageCount ?? 0)
@@ -98,7 +130,11 @@ function PdfDocumentPreview({ contentUrl, preview, targetLocation, targetQuery, 
   }, [pageCount, targetLocation])
 
   useEffect(() => () => {
+    ocrRunIdRef.current += 1
+    mineruRunIdRef.current += 1
     ocrCancelledRef.current = true
+    ocrSaveControllerRef.current?.abort()
+    mineruControllerRef.current?.abort()
     void ocrWorkerRef.current?.terminate()
   }, [])
 
@@ -107,26 +143,38 @@ function PdfDocumentPreview({ contentUrl, preview, targetLocation, targetQuery, 
   }
   const pageWidth = Math.max(240, stageWidth - 48)
   const runOcr = async (): Promise<void> => {
-    if (ocrRunning || pdfDocument === undefined || pageCount === 0) return
-    const pagesToRead = Math.min(pageCount, 500)
-    const warning = pagesToRead > 50 ? `\n\n该文件有 ${pagesToRead} 页，识别可能需要较长时间。` : ''
-    if (!window.confirm(`将在本机逐页识别文字，并用结果重建检索索引。首次使用需要下载中文 OCR 语言数据。${warning}`)) return
+    if (ocrRunning) return
+    if (pdfDocument === undefined || pageCount === 0) {
+      setOcrProgress('')
+      setOcrError('PDF 页面尚未加载完成，请稍后重试')
+      return
+    }
+    if (pageCount > 5_000) {
+      setOcrProgress('')
+      setOcrError('单次本地 OCR 最多支持 5000 页，请拆分 PDF 后识别')
+      return
+    }
+    const pagesToRead = pageCount
     setOcrRunning(true)
     setOcrError(undefined)
     setOcrPercent(undefined)
     setOcrProgress('正在加载中文 OCR 模型…')
     ocrCancelledRef.current = false
+    const runId = ++ocrRunIdRef.current
     const pages: string[] = []
     let recognizingPage = 0
+    let worker: Awaited<ReturnType<typeof createWorker>> | undefined
     try {
-      const worker = await createWorker('chi_sim+eng', 1, {
+      worker = await createWorker('chi_sim+eng', 1, {
         logger(message) {
+          if (ocrRunIdRef.current !== runId) return
           if (message.status === 'recognizing text') {
             setOcrProgress(current => current.replace(/\s·\s\d+%$/, '') + ` · ${Math.round(message.progress * 100)}%`)
             setOcrPercent(Math.round(((recognizingPage - 1 + message.progress) / pagesToRead) * 100))
           }
         },
       })
+      if (ocrRunIdRef.current !== runId || ocrCancelledRef.current) return
       ocrWorkerRef.current = worker
       for (let number = 1; number <= pagesToRead; number += 1) {
         if (ocrCancelledRef.current) throw new Error('OCR 已取消')
@@ -146,45 +194,83 @@ function PdfDocumentPreview({ contentUrl, preview, targetLocation, targetQuery, 
         setOcrPercent(Math.round((number / pagesToRead) * 100))
         page.cleanup()
       }
+      if (ocrRunIdRef.current !== runId || ocrCancelledRef.current) return
       setOcrProgress('正在重建检索索引…')
       setOcrPercent(99)
-      await saveOcr(preview.document.id, pages)
+      const saveController = new AbortController()
+      ocrSaveControllerRef.current = saveController
+      await saveOcr(preview.document.id, pages, saveController.signal)
+      if (ocrRunIdRef.current !== runId || ocrCancelledRef.current) return
       setOcrText(pages.map((text, index) => `第 ${index + 1} 页\n\n${text}`).join('\n\n'))
       setMode('text')
       setOcrPercent(100)
       setOcrProgress(`OCR 完成，共识别 ${pagesToRead} 页`)
     } catch (error) {
-      setOcrError(error instanceof Error ? error.message : 'OCR 识别失败')
+      if (ocrRunIdRef.current === runId) setOcrError(error instanceof Error ? error.message : 'OCR 识别失败')
     } finally {
-      await ocrWorkerRef.current?.terminate().catch(() => undefined)
-      ocrWorkerRef.current = undefined
-      setOcrRunning(false)
+      await worker?.terminate().catch(() => undefined)
+      if (ocrWorkerRef.current === worker) ocrWorkerRef.current = undefined
+      if (ocrRunIdRef.current === runId) ocrSaveControllerRef.current = undefined
+      if (ocrRunIdRef.current === runId) setOcrRunning(false)
     }
   }
 
   const cancelOcr = (): void => {
+    ocrRunIdRef.current += 1
     ocrCancelledRef.current = true
-    setOcrProgress('正在取消 OCR…')
+    ocrSaveControllerRef.current?.abort()
+    ocrSaveControllerRef.current = undefined
+    setOcrRunning(false)
+    setOcrProgress('')
+    setOcrError('OCR 已取消')
     void ocrWorkerRef.current?.terminate()
+    ocrWorkerRef.current = undefined
   }
 
   const runMineru = async (): Promise<void> => {
-    if (mineruRunning || mineru?.enabled !== true || mineru.apiKeyConfigured !== true) return
-    if (!window.confirm('将把当前 PDF 上传到 MinerU 进行云端 OCR，并用识别结果重建检索索引。是否继续？')) return
+    if (mineruRunning) return
+    if (mineru?.enabled !== true) {
+      setOcrProgress('')
+      setOcrError('MinerU 尚未开启，请先在设置中启用')
+      return
+    }
+    if (!mineru.apiKeyConfigured) {
+      setOcrProgress('')
+      setOcrError('请先在设置中配置 MinerU API Token')
+      return
+    }
+    if (pdfDocument === undefined || pageCount === 0) {
+      setOcrProgress('')
+      setOcrError('PDF 页面尚未加载完成，请稍后重试')
+      return
+    }
     setMineruRunning(true)
     setOcrError(undefined)
-    setOcrPercent(undefined)
-    setOcrProgress('正在上传 PDF 到 MinerU…')
+    setOcrPercent(0)
+    setOcrProgress('MinerU 任务正在启动…')
+    const runId = ++mineruRunIdRef.current
+    const controller = new AbortController()
+    mineruControllerRef.current = controller
     try {
-      const freshPreview = await runMineruOcr(preview.document.id)
+      const freshPreview = await runMineruOcr(preview.document.id, job => {
+        if (mineruRunIdRef.current !== runId) return
+        setOcrPercent(job.progress)
+        setOcrProgress(mineruProgressLabel(job))
+      }, controller.signal)
+      if (mineruRunIdRef.current !== runId) return
       setOcrText(freshPreview.content)
       setMode('text')
       setOcrPercent(100)
       setOcrProgress(`MinerU OCR 完成${freshPreview.pageCount === undefined ? '' : `，共识别 ${freshPreview.pageCount} 页`}`)
     } catch (error) {
-      setOcrError(error instanceof Error ? error.message : 'MinerU OCR 失败')
+      if (mineruRunIdRef.current === runId && !controller.signal.aborted) {
+        setOcrError(error instanceof Error ? error.message : 'MinerU OCR 失败')
+      }
     } finally {
-      setMineruRunning(false)
+      if (mineruRunIdRef.current === runId) {
+        mineruControllerRef.current = undefined
+        setMineruRunning(false)
+      }
     }
   }
 
@@ -214,14 +300,14 @@ function PdfDocumentPreview({ contentUrl, preview, targetLocation, targetQuery, 
           <button
             className="pdf-ocr-button"
             type="button"
-            disabled={pdfDocument === undefined || mineruRunning || ocrRunning || !mineru.apiKeyConfigured}
+            disabled={mineruRunning || ocrRunning}
             title={mineru.apiKeyConfigured ? '上传到 MinerU 进行精准解析' : '请先在设置中配置 MinerU API Token'}
             onClick={() => void runMineru()}
           >
             <CloudUpload size={15} />{mineruRunning ? 'MinerU 识别中…' : 'MinerU OCR'}
           </button>
         )}
-        <button className="pdf-ocr-button" type="button" disabled={pdfDocument === undefined || mineruRunning} onClick={() => ocrRunning ? cancelOcr() : void runOcr()}>
+        <button className="pdf-ocr-button" type="button" disabled={mineruRunning} onClick={() => ocrRunning ? cancelOcr() : void runOcr()}>
           {ocrRunning ? <Square size={15} /> : <ScanText size={15} />}{ocrRunning ? '取消 OCR' : 'OCR 识别'}
         </button>
         <div className="pdf-file-actions">
@@ -283,17 +369,24 @@ function PdfDocumentPreview({ contentUrl, preview, targetLocation, targetQuery, 
           )}
         </div>
       )}
-      {mode === 'text' && preview.truncated && <div className="preview-truncated">检索和 Wiki 只使用已提取的文本（最多前 500 页或约 200 万字），页面预览仍可翻阅全文。</div>}
+      {mode === 'text' && preview.truncated && <div className="preview-truncated">检索和 Wiki 只使用已提取的文本（最多前 5000 页或约 200 万字），页面预览仍可翻阅全文。</div>}
     </section>
   )
 }
 
 export function apply(ctx: Context): void {
   ctx.effect(() => ctx.clientApp.registerDocumentPreviewRenderer({
-    component: props => <PdfDocumentPreview {...props} saveOcr={async (documentId, pages) => {
-      await ctx.connection.updatePdfOcr(documentId, { pages })
-    }} loadMineru={async () => (await ctx.connection.system()).mineru} runMineruOcr={async documentId => {
-      await ctx.connection.runMineruPdfOcr(documentId)
+    component: props => <PdfDocumentPreview {...props} saveOcr={async (documentId, pages, signal) => {
+      await ctx.connection.updatePdfOcr(documentId, { pages }, signal)
+    }} loadMineru={async () => (await ctx.connection.system()).mineru} runMineruOcr={async (documentId, onProgress, signal) => {
+      let job = await ctx.connection.startMineruPdfOcr(documentId, signal)
+      onProgress(job)
+      while (job.state === 'queued' || job.state === 'running') {
+        await waitForMineruPoll(signal)
+        job = await ctx.connection.mineruPdfOcrJob(job.id, signal)
+        onProgress(job)
+      }
+      if (job.state === 'failed') throw new Error(job.error ?? 'MinerU OCR 失败')
       return await ctx.connection.documentPreview(documentId)
     }} />,
     format: 'pdf',

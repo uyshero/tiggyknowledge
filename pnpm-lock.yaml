@@ -1346,6 +1346,9 @@ importers:
       '@tiggyknowledge/preview-text':
         specifier: workspace:^
         version: link:../preview-text
+      '@tiggyknowledge/query':
+        specifier: workspace:^
+        version: link:../query
       '@tiggyknowledge/settings-file':
         specifier: workspace:^
         version: link:../../settings/settings-file

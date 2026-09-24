@@ -15,7 +15,8 @@ declare module '@deepseek-ai/cordis' {
 }
 
 const MAX_DOCUMENT_JSON_BODY_BYTES = 800 * 1024
-const MAX_OCR_JSON_BODY_BYTES = 12 * 1024 * 1024
+const MAX_OCR_JSON_BODY_BYTES = 40 * 1024 * 1024
+const MAX_OCR_PAGES = 5_000
 
 export class KnowledgeDocuments extends Service {
   static inject = ['knowledgeCatalog', 'knowledgeContent', 'knowledgeChunker', 'knowledgeIndex', 'knowledgeMetadata']
@@ -322,8 +323,8 @@ export class KnowledgeDocuments extends Service {
     const document = this.ctx.knowledgeCatalog.getDocuments([documentId])[0]
     if (document === undefined) throw new RangeError('知识条目不存在')
     if (document.sourceType !== 'pdf') throw new RangeError('只有 PDF 支持 OCR 识别结果')
-    if (!Array.isArray(input.pages) || input.pages.length === 0 || input.pages.length > 500) {
-      throw new RangeError('OCR 结果应包含 1 到 500 页')
+    if (!Array.isArray(input.pages) || input.pages.length === 0 || input.pages.length > MAX_OCR_PAGES) {
+      throw new RangeError(`OCR 结果应包含 1 到 ${MAX_OCR_PAGES} 页`)
     }
     let characters = 0
     const pages = input.pages.map((page, index) => {

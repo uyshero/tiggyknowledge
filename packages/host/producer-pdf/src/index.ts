@@ -9,7 +9,7 @@ declare module '@deepseek-ai/cordis' {
   }
 }
 
-const MAX_PDF_PAGES = 500
+const MAX_PDF_PAGES = 5_000
 const MAX_EXTRACTED_CHARACTERS = 2_000_000
 
 export interface ExtractedPdf {

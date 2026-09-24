@@ -43,7 +43,7 @@ import type {
   LibraryChatStreamEvent,
   CancelLibraryChatResult,
   LlmIntegrationSettings,
-  MineruPdfOcrResult,
+  MineruPdfOcrJob,
   MineruSettings,
   SendLibraryChatMessageInput,
   SetMineruApiKeyInput,
@@ -665,11 +665,15 @@ export class ConnectionService extends Service {
     })
   }
 
-  async runMineruPdfOcr(documentId: string, signal?: AbortSignal): Promise<MineruPdfOcrResult> {
-    return await this.request<MineruPdfOcrResult>(`/api/documents/${encodeURIComponent(documentId)}/mineru-ocr`, {
+  async startMineruPdfOcr(documentId: string, signal?: AbortSignal): Promise<MineruPdfOcrJob> {
+    return await this.request<MineruPdfOcrJob>(`/api/documents/${encodeURIComponent(documentId)}/mineru-ocr`, {
       method: 'POST',
       ...(signal === undefined ? {} : { signal }),
     })
+  }
+
+  async mineruPdfOcrJob(jobId: string, signal?: AbortSignal): Promise<MineruPdfOcrJob> {
+    return await this.request<MineruPdfOcrJob>(`/api/mineru-ocr/${encodeURIComponent(jobId)}`, signal === undefined ? {} : { signal })
   }
 
   async updateMarkdownNote(documentId: string, input: UpdateKnowledgeMarkdownNoteInput, signal?: AbortSignal): Promise<KnowledgeDocument> {

@@ -1,5 +1,5 @@
 import type { Context } from '@deepseek-ai/cordis'
-import { ChevronRight, FileEdit, FolderClosed, FolderPlus, History, Library, Pencil, Plus, RefreshCw, Search, Settings, Sparkles, Square, Trash2, Undo2, Unlock, X } from 'lucide-react'
+import { ChevronRight, FileEdit, FolderClosed, FolderPlus, History, Library, PanelLeftClose, PanelLeftOpen, Pencil, Plus, RefreshCw, Search, Settings, Sparkles, Square, Trash2, Undo2, Unlock, X } from 'lucide-react'
 import { Fragment, useCallback, useEffect, useMemo, useState, useSyncExternalStore, type JSX, type ReactNode } from 'react'
 import type {} from '@tiggyknowledge/client-connection'
 import type {} from '@tiggyknowledge/client-runtime'
@@ -231,9 +231,13 @@ function sourceList(page: WikiPage | undefined): WikiSource[] {
 
 function generationPhaseLabel(phase: string): string {
   if (phase === 'queued') return '已加入后台队列'
-  if (phase.startsWith('summarizing:')) return '正在提取文章要点'
+  const segment = /^summarizing:(\d+)\/(\d+)$/.exec(phase)
+  if (segment !== null) return `正在遍历全文（第 ${segment[1]} / ${segment[2]} 段）`
+  if (phase.startsWith('summarizing:')) return '正在准备全文解析'
   if (phase === 'synthesizing') return '正在生成词条'
   if (phase === 'synthesizing:compact-retry') return '输出过长，正在紧凑重试'
+  const synthesisBatch = /^synthesizing:(\d+)\/(\d+)$/.exec(phase)
+  if (synthesisBatch !== null) return `正在分批生成词条（第 ${synthesisBatch[1]} / ${synthesisBatch[2]} 批）`
   if (phase === 'completed') return '词条已生成'
   if (phase === 'cancelled') return '已取消'
   if (phase === 'failed') return '生成失败'
@@ -335,6 +339,7 @@ export function apply(ctx: Context): void {
     const [historyLoading, setHistoryLoading] = useState(false)
     const [revertingVersion, setRevertingVersion] = useState<number>()
     const [treeQuery, setTreeQuery] = useState('')
+    const [treeCollapsed, setTreeCollapsed] = useState(false)
     const [openQueue, setOpenQueue] = useState<'inbox' | 'reviews' | 'skipped'>()
     const [createPageOpen, setCreatePageOpen] = useState(false)
     const [createTitle, setCreateTitle] = useState('')
@@ -345,6 +350,7 @@ export function apply(ctx: Context): void {
     const [createQuestions, setCreateQuestions] = useState('')
     const [createSectionTitle, setCreateSectionTitle] = useState('说明')
     const [createBody, setCreateBody] = useState('')
+    const [createSourceDocumentIds, setCreateSourceDocumentIds] = useState<string[]>([])
     const [creatingPage, setCreatingPage] = useState(false)
     const [assistingPage, setAssistingPage] = useState(false)
     const [categoriesOpen, setCategoriesOpen] = useState(false)
@@ -618,6 +624,7 @@ export function apply(ctx: Context): void {
           purpose: createPurpose.trim(),
           questions: createQuestions.split('\n').map(item => item.trim()).filter(Boolean),
           sectionTitle: createSectionTitle.trim() || '说明',
+          sourceDocumentIds: createSourceDocumentIds,
           body: createBody.trim(),
         })
         setCreatePageOpen(false)
@@ -627,6 +634,7 @@ export function apply(ctx: Context): void {
         setCreateQuestions('')
         setCreateSectionTitle('说明')
         setCreateBody('')
+        setCreateSourceDocumentIds([])
         await loadWorkspace()
         setSelectedPageId(created.id)
       } catch (reason) {
@@ -651,6 +659,7 @@ export function apply(ctx: Context): void {
         setCreateQuestions(draft.questions.join('\n'))
         setCreateSectionTitle(draft.sectionTitle)
         setCreateBody(draft.body)
+        setCreateSourceDocumentIds(draft.sourceDocumentIds)
       } catch (reason) {
         setError(errorMessage(reason, 'AI 无法补充这个词条'))
       } finally {
@@ -889,24 +898,37 @@ export function apply(ctx: Context): void {
             <p>{inbox.length > 0 ? '点上方「待确认文章」后生成词条，不影响你继续阅读。' : skipped.length > 0 ? '点上方「已跳过文章」可以重新解析。' : '知识库出现新文章后，点上方数字即可处理。'}</p>
           </section>
         ) : (
-          <main className="wiki-workbench">
-            <nav className="wiki-tree" aria-label="Wiki 目录">
-              <div className="wiki-pane-title">目录</div>
-              <label className="wiki-tree-search">
-                <Search size={13} />
-                <input value={treeQuery} onChange={event => setTreeQuery(event.target.value)} placeholder="搜索词条" />
-              </label>
-              {tree.length === 0 ? <p className="wiki-no-sources">没有匹配的词条。</p> : tree.map(node => node.kind === 'folder' ? (
-                <div className="wiki-folder" key={node.folder.id} style={{ paddingLeft: `${9 + node.depth * 16}px` }}>
-                  <FolderClosed size={13} /><span>{node.folder.name}</span>
-                </div>
-              ) : (
-                <button className={node.page.id === selectedPageId ? 'active' : ''} key={node.page.id} style={{ paddingLeft: `${12 + node.depth * 16}px` }} type="button" onClick={() => setSelectedPageId(node.page.id)}>
-                  <ChevronRight size={13} /><span>{node.page.title}</span>
-                  {node.page.status === 'draft' && <em>待核</em>}
-                  {node.page.state !== 'ready' && <i />}
+          <main className={`wiki-workbench${treeCollapsed ? ' tree-collapsed' : ''}`}>
+            <nav className={`wiki-tree${treeCollapsed ? ' collapsed' : ''}`} aria-label="Wiki 目录">
+              <div className="wiki-pane-title">
+                <span>目录</span>
+                <button type="button" title={treeCollapsed ? '展开 Wiki 目录' : '收起 Wiki 目录'} onClick={() => setTreeCollapsed(value => !value)}>
+                  {treeCollapsed ? <PanelLeftOpen size={14} /> : <PanelLeftClose size={14} />}
                 </button>
-              ))}
+              </div>
+              {treeCollapsed ? <strong className="wiki-tree-collapsed-label">Wiki 目录</strong> : (
+                <>
+                  <label className="wiki-tree-search">
+                    <Search size={13} />
+                    <input value={treeQuery} onChange={event => setTreeQuery(event.target.value)} placeholder="搜索词条" />
+                  </label>
+                  {tree.length === 0 ? <p className="wiki-no-sources">没有匹配的词条。</p> : tree.map(node => node.kind === 'folder' ? (
+                    <div className="wiki-folder" key={node.folder.id} style={{ paddingLeft: `${9 + Math.min(node.depth, 3) * 12}px` }} title={node.folder.name}>
+                      <FolderClosed size={13} /><span>{node.folder.name}</span>
+                    </div>
+                  ) : (
+                    <button className={node.page.id === selectedPageId ? 'active' : ''} key={node.page.id} style={{ paddingLeft: `${12 + Math.min(node.depth, 3) * 12}px` }} title={node.page.title} type="button" onClick={() => setSelectedPageId(node.page.id)}>
+                      <ChevronRight size={13} /><span className="wiki-tree-item-title">{node.page.title}</span>
+                      {(node.page.status === 'draft' || node.page.state !== 'ready') && (
+                        <span className="wiki-tree-badges">
+                          {node.page.status === 'draft' && <em>待核</em>}
+                          {node.page.state !== 'ready' && <i />}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </>
+              )}
             </nav>
             <article className="wiki-content">
               {pageLoading || page === undefined ? <div className="wiki-state">正在读取页面...</div> : editing ? (
@@ -1040,10 +1062,10 @@ export function apply(ctx: Context): void {
                 <button type="button" title="关闭" onClick={() => setCreatePageOpen(false)}><X size={18} /></button>
               </header>
               <div className="wiki-manage-form">
-                <label><span>词条名称</span><input autoFocus value={createTitle} onChange={event => setCreateTitle(event.target.value)} placeholder="人物、组织、概念或事件名称" /></label>
+                <label><span>词条名称</span><input autoFocus value={createTitle} onChange={event => { setCreateTitle(event.target.value); setCreateSourceDocumentIds([]) }} placeholder="人物、组织、概念或事件名称" /></label>
                 <div className="wiki-assist-row">
                   <button className="secondary-button" type="button" disabled={assistingPage || createTitle.trim() === '' || status?.llmConfigured !== true} onClick={() => void assistManualPage()}><Sparkles size={14} />{assistingPage ? 'AI 正在补充...' : 'AI 补充解释'}</button>
-                  <span>AI 会生成可编辑草稿，不会直接创建词条。</span>
+                  <span>{createSourceDocumentIds.length > 0 ? `已依据 ${createSourceDocumentIds.length} 份知识库文件生成，可继续编辑。` : 'AI 会先检索知识库文件，再生成可编辑草稿。'}</span>
                 </div>
                 <div className="wiki-manage-grid">
                   <label><span>类型</span><select value={createType} onChange={event => setCreateType(event.target.value as WikiPageSummary['pageType'])}>

@@ -3,6 +3,12 @@ import { describe, expect, it } from 'vitest'
 import { __private } from '../src/index.ts'
 
 describe('MinerU result parser', () => {
+  it('maps provider page progress into the extraction stage', () => {
+    expect(__private.mineruExtractionProgress(0, 20)).toBe(15)
+    expect(__private.mineruExtractionProgress(10, 20)).toBe(50)
+    expect(__private.mineruExtractionProgress(20, 20)).toBe(85)
+  })
+
   it('groups content-list text by PDF page', () => {
     const pages = __private.pagesFromContentList(JSON.stringify([
       { page_idx: 0, type: 'text', text: '第一页正文' },

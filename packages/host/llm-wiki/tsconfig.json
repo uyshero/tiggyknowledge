@@ -36,6 +36,9 @@
       "path": "../llm-client"
     },
     {
+      "path": "../query"
+    },
+    {
       "path": "../plugin-surface"
     }
   ]

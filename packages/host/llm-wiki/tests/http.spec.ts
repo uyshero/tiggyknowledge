@@ -13,6 +13,9 @@ describe('LLM Wiki HTTP surface', () => {
       listDocuments: () => [],
     })
     ctx.provide('knowledgePreview', {})
+    ctx.provide('knowledgeQuery', {
+      search: input => ({ query: input.text, mode: 'keyword', total: 0, results: [] }),
+    })
     ctx.provide('llmClient', {})
     ctx.provide('llmCredentials', {
       status: () => ({ configured: false }),

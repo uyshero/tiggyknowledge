@@ -29,16 +29,16 @@ describe('pdf producer plugin', () => {
     }
   })
 
-  it('imports PDFs over 500 pages and only extracts the first 500 pages of text', { timeout: 30_000 }, async () => {
+  it('extracts text beyond page 500', { timeout: 30_000 }, async () => {
     const ctx = new Context()
     await ctx.plugin(TextProducer)
     await ctx.plugin(PdfProducer)
     try {
       const oversized = await ctx.pdfProducer.extract('long.pdf', multiPagePdf(501))
-      expect(oversized).toMatchObject({ pageCount: 501, truncated: true })
-      expect(oversized.pages).toHaveLength(500)
+      expect(oversized).toMatchObject({ pageCount: 501, truncated: false })
+      expect(oversized.pages).toHaveLength(501)
       expect(oversized.pages[0]).toContain('page 1')
-      expect(oversized.pages[499]).toContain('page 500')
+      expect(oversized.pages[500]).toContain('page 501')
     } finally {
       await ctx.fiber.dispose()
     }

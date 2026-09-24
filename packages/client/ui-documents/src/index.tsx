@@ -1,5 +1,5 @@
 import type { Context } from '@deepseek-ai/cordis'
-import { ArrowLeft, BadgeInfo, FilePenLine, FileText, Link2, Maximize2, Mic, Search, Star, Tag, Trash2, Upload, X } from 'lucide-react'
+import { ArrowLeft, BadgeInfo, FilePenLine, FileText, Link2, Maximize2, Mic, Minimize2, Search, Star, Tag, Trash2, Upload, X } from 'lucide-react'
 import { Fragment, useEffect, useMemo, useRef, useState, useSyncExternalStore, type JSX, type ReactNode } from 'react'
 import type {} from '@tiggyknowledge/client-connection'
 import type {} from '@tiggyknowledge/client-runtime'
@@ -270,6 +270,7 @@ export function apply(ctx: Context): void {
     const [editSaving, setEditSaving] = useState(false)
     const [editError, setEditError] = useState<string>()
     const [previewExpanded, setPreviewExpanded] = useState(false)
+    const [previewFullscreen, setPreviewFullscreen] = useState(false)
     const lastPageStateRef = useRef(app.pageState)
     const externalPageStateChanged = !Object.is(lastPageStateRef.current, app.pageState)
     const pendingExternalRouteRef = useRef<DocumentPageState>()
@@ -347,11 +348,14 @@ export function apply(ctx: Context): void {
     useEffect(() => {
       if (!previewExpanded) return
       const closeOnEscape = (event: KeyboardEvent): void => {
-        if (event.key === 'Escape') setPreviewExpanded(false)
+        if (event.key === 'Escape') {
+          if (previewFullscreen) setPreviewFullscreen(false)
+          else setPreviewExpanded(false)
+        }
       }
       window.addEventListener('keydown', closeOnEscape)
       return () => window.removeEventListener('keydown', closeOnEscape)
-    }, [previewExpanded])
+    }, [previewExpanded, previewFullscreen])
 
     useEffect(() => {
       if (libraryId.length === 0 || selectedDocumentId === undefined) return
@@ -369,6 +373,7 @@ export function apply(ctx: Context): void {
         setMetadata(undefined)
         setPreviewError(undefined)
         setPreviewExpanded(false)
+        setPreviewFullscreen(false)
         return
       }
       const controller = new AbortController()
@@ -413,6 +418,7 @@ export function apply(ctx: Context): void {
       setTargetQuery(undefined)
       setActiveInspectorId(undefined)
       setPreviewExpanded(false)
+      setPreviewFullscreen(false)
       setEditDialogOpen(false)
     }
 
@@ -675,6 +681,7 @@ export function apply(ctx: Context): void {
                   </>
                 ) : (
                   <PreviewRenderer
+                    key={preview.document.id}
                     contentUrl={ctx.connection.documentContentUrl(preview.document.id)}
                     preview={preview}
                     {...(targetLocation === undefined ? {} : { targetLocation })}
@@ -687,14 +694,19 @@ export function apply(ctx: Context): void {
         </div>
 
         {previewExpanded && preview !== undefined && (
-          <div className="dialog-backdrop">
-            <section className={`dialog-panel document-preview-dialog${preview.format === 'pdf' || preview.format === 'url' ? ' document-preview-dialog-fill' : ''}`} role="dialog" aria-modal="true" aria-labelledby="document-preview-dialog-title">
+          <div className={`dialog-backdrop${previewFullscreen ? ' document-preview-backdrop-fullscreen' : ''}`}>
+            <section className={`dialog-panel document-preview-dialog${preview.format === 'pdf' || preview.format === 'url' ? ' document-preview-dialog-fill' : ''}${previewFullscreen ? ' fullscreen' : ''}`} role="dialog" aria-modal="true" aria-labelledby="document-preview-dialog-title">
               <header className="dialog-header">
                 <div>
                   <p className="eyebrow">{formatSourceType(preview.format)}</p>
                   <h2 id="document-preview-dialog-title">{preview.document.title}</h2>
                 </div>
-                <button className="dialog-close" type="button" title="关闭" onClick={() => setPreviewExpanded(false)}><X size={18} /></button>
+                <div className="dialog-header-actions">
+                  <button className="dialog-close" type="button" title={previewFullscreen ? '退出全屏' : '全屏查看'} onClick={() => setPreviewFullscreen(value => !value)}>
+                    {previewFullscreen ? <Minimize2 size={18} /> : <Maximize2 size={18} />}
+                  </button>
+                  <button className="dialog-close" type="button" title="关闭" onClick={() => { setPreviewFullscreen(false); setPreviewExpanded(false) }}><X size={18} /></button>
+                </div>
               </header>
               <div className="dialog-body">
                 {PreviewRenderer === undefined ? (
@@ -704,6 +716,7 @@ export function apply(ctx: Context): void {
                   </>
                 ) : (
                   <PreviewRenderer
+                    key={preview.document.id}
                     contentUrl={ctx.connection.documentContentUrl(preview.document.id)}
                     preview={preview}
                     {...(targetLocation === undefined ? {} : { targetLocation })}

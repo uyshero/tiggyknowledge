@@ -1,6 +1,8 @@
 import { setTimeout as delay } from 'node:timers/promises'
 import { Context, Service } from '@deepseek-ai/cordis'
 import type {
+  MineruPdfOcrJob,
+  MineruPdfOcrJobPhase,
   MineruPdfOcrResult,
   MineruSettings,
   SetMineruApiKeyInput,
@@ -45,6 +47,7 @@ interface MineruBatchResult {
 
 export class MineruApi extends Service {
   static inject = ['knowledgeDocuments', 'llmCredentials', 'pdfProducer', 'settings']
+  private readonly jobs = new Map<string, MineruPdfOcrJob>()
 
   constructor(ctx: Context) {
     super(ctx, 'mineruApi')
@@ -92,15 +95,25 @@ export class MineruApi extends Service {
           id: 'mineru:pdf-ocr',
           methods: ['POST'],
           path: /^\/api\/documents\/([^/]+)\/mineru-ocr$/,
-          handler: async ({ assertSameOrigin, json, match }) => {
+          handler: ({ assertSameOrigin, json, match }) => {
             assertSameOrigin()
             try {
-              json(await this.runPdfOcr(pathSegment(match)))
+              json(this.startPdfOcr(pathSegment(match)))
             } catch (error) {
               if (error instanceof RangeError) throw new HttpError(400, 'invalid_mineru_ocr', error.message)
               if (error instanceof HttpError) throw error
               throw new HttpError(502, 'mineru_ocr_failed', messageFrom(error, 'MinerU OCR 失败'))
             }
+          },
+        },
+        {
+          id: 'mineru:pdf-ocr-job',
+          methods: ['GET'],
+          path: /^\/api\/mineru-ocr\/([^/]+)$/,
+          handler: ({ json, match }) => {
+            const job = this.job(pathSegment(match))
+            if (job === undefined) throw new HttpError(404, 'mineru_ocr_job_not_found', 'MinerU OCR 任务不存在')
+            json(job)
           },
         },
       ],
@@ -111,7 +124,56 @@ export class MineruApi extends Service {
     return this.ctx.settings.mineru(() => this.ctx.llmCredentials.storedStatus(CREDENTIAL_ID))
   }
 
-  async runPdfOcr(documentId: string): Promise<MineruPdfOcrResult> {
+  startPdfOcr(documentId: string): MineruPdfOcrJob {
+    const active = [...this.jobs.values()].find(job => job.documentId === documentId && (job.state === 'queued' || job.state === 'running'))
+    if (active !== undefined) return active
+    this.trimJobs()
+    const now = new Date().toISOString()
+    const job: MineruPdfOcrJob = {
+      id: crypto.randomUUID(),
+      documentId,
+      state: 'queued',
+      phase: 'queued',
+      progress: 0,
+      createdAt: now,
+      updatedAt: now,
+    }
+    this.jobs.set(job.id, job)
+    void this.runPdfOcr(documentId, (phase, progress, pages) => {
+      this.updateJob(job.id, {
+        state: 'running',
+        phase,
+        progress,
+        ...(pages === undefined ? {} : pages),
+      })
+    }).then(result => {
+      this.updateJob(job.id, {
+        state: 'completed',
+        phase: 'completed',
+        progress: 100,
+        extractedPages: result.pageCount,
+        result,
+      })
+    }).catch(error => {
+      this.updateJob(job.id, {
+        state: 'failed',
+        phase: 'failed',
+        error: messageFrom(error, 'MinerU OCR 失败'),
+      })
+      this.ctx.logger('mineru-api').warn('MinerU OCR job failed', error)
+    })
+    return job
+  }
+
+  job(jobId: string): MineruPdfOcrJob | undefined {
+    return this.jobs.get(jobId)
+  }
+
+  async runPdfOcr(
+    documentId: string,
+    onProgress: (phase: MineruPdfOcrJobPhase, progress: number, pages?: Pick<MineruPdfOcrJob, 'extractedPages' | 'totalPages'>) => void = () => undefined,
+  ): Promise<MineruPdfOcrResult> {
+    onProgress('validating', 2)
     const settings = this.settings()
     if (!settings.enabled) throw new RangeError('MinerU 尚未开启，请先在设置中启用')
     if (!settings.apiKeyConfigured) throw new RangeError('尚未配置 MinerU API Token')
@@ -124,12 +186,21 @@ export class MineruApi extends Service {
     if (pdf.pageCount > MAX_MINERU_PAGES) {
       throw new RangeError('MinerU 精准解析最多支持 200 页；更长的 PDF 请使用本地 OCR 或拆分后识别')
     }
+    onProgress('validating', 5, { totalPages: pdf.pageCount })
 
     const apiKey = this.ctx.llmCredentials.getStoredApiKey(CREDENTIAL_ID)
+    onProgress('uploading', 8, { totalPages: pdf.pageCount })
     const batchId = await this.createUpload(settings, apiKey, source.document.id, source.document.originalName)
     await this.upload(batchId.uploadUrl, source.bytes)
-    const completed = await this.waitForResult(settings, apiKey, batchId.batchId)
+    onProgress('extracting', 15, { extractedPages: 0, totalPages: pdf.pageCount })
+    const completed = await this.waitForResult(settings, apiKey, batchId.batchId, (extractedPages, totalPages) => {
+      const denominator = Math.max(1, totalPages || pdf.pageCount)
+      const progress = mineruExtractionProgress(extractedPages, denominator)
+      onProgress('extracting', progress, { extractedPages, totalPages: denominator })
+    })
+    onProgress('downloading', 88, { totalPages: pdf.pageCount })
     const pages = await this.downloadPages(completed.fullZipUrl)
+    onProgress('indexing', 95, { extractedPages: pages.length, totalPages: pdf.pageCount })
     const document = this.ctx.knowledgeDocuments.updatePdfOcr(documentId, { pages })
     return {
       document,
@@ -187,6 +258,7 @@ export class MineruApi extends Service {
     settings: MineruSettings,
     apiKey: string,
     batchId: string,
+    onProgress: (extractedPages: number, totalPages: number) => void,
   ): Promise<{ taskId: string, fullZipUrl: string }> {
     const deadline = Date.now() + POLL_TIMEOUT_MS
     while (Date.now() < deadline) {
@@ -199,6 +271,11 @@ export class MineruApi extends Service {
       const results = Array.isArray(data.extract_result) ? data.extract_result : []
       const result = objectValue(results[0]) as MineruBatchResult
       const state = stringValue(result.state)
+      const extractedPages = Number(result.extract_progress?.extracted_pages ?? 0)
+      const totalPages = Number(result.extract_progress?.total_pages ?? 0)
+      if (Number.isFinite(extractedPages) && Number.isFinite(totalPages)) {
+        onProgress(Math.max(0, extractedPages), Math.max(0, totalPages))
+      }
       if (state === 'done') {
         const fullZipUrl = stringValue(result.full_zip_url)
         if (fullZipUrl === '') throw new Error('MinerU 已完成解析，但未返回结果文件')
@@ -219,6 +296,26 @@ export class MineruApi extends Service {
     const bytes = new Uint8Array(await response.arrayBuffer())
     if (bytes.byteLength > MAX_RESULT_ZIP_BYTES) throw new Error('MinerU 结果压缩包超过 300 MB')
     return pagesFromZip(bytes)
+  }
+
+  private updateJob(jobId: string, patch: Partial<MineruPdfOcrJob>): void {
+    const current = this.jobs.get(jobId)
+    if (current === undefined) return
+    this.jobs.set(jobId, {
+      ...current,
+      ...patch,
+      id: current.id,
+      documentId: current.documentId,
+      updatedAt: new Date().toISOString(),
+    })
+  }
+
+  private trimJobs(): void {
+    if (this.jobs.size < 100) return
+    const removable = [...this.jobs.values()]
+      .filter(job => job.state === 'completed' || job.state === 'failed')
+      .sort((left, right) => left.updatedAt.localeCompare(right.updatedAt))
+    for (const job of removable.slice(0, Math.max(1, this.jobs.size - 99))) this.jobs.delete(job.id)
   }
 }
 
@@ -322,6 +419,10 @@ function messageFrom(error: unknown, fallback: string): string {
   return error instanceof Error && error.message.trim() !== '' ? error.message : fallback
 }
 
-export const __private = { pagesFromContentList, pagesFromZip }
+function mineruExtractionProgress(extractedPages: number, totalPages: number): number {
+  return 15 + Math.round(Math.min(1, Math.max(0, extractedPages) / Math.max(1, totalPages)) * 70)
+}
+
+export const __private = { mineruExtractionProgress, pagesFromContentList, pagesFromZip }
 
 export default MineruApi

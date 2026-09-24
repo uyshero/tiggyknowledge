@@ -17,6 +17,7 @@
     "@tiggyknowledge/llm-client": "workspace:^",
     "@tiggyknowledge/llm-credentials": "workspace:^",
     "@tiggyknowledge/preview-text": "workspace:^",
+    "@tiggyknowledge/query": "workspace:^",
     "@tiggyknowledge/settings-file": "workspace:^",
     "@tiggyknowledge/wiki-sqlite": "workspace:^",
     "@tiggyknowledge/plugin-surface": "workspace:^"
@@ -29,6 +30,7 @@
     "@tiggyknowledge/llm-client": "workspace:^",
     "@tiggyknowledge/llm-credentials": "workspace:^",
     "@tiggyknowledge/preview-text": "workspace:^",
+    "@tiggyknowledge/query": "workspace:^",
     "@tiggyknowledge/settings-file": "workspace:^",
     "@tiggyknowledge/wiki-sqlite": "workspace:^",
     "@tiggyknowledge/plugin-surface": "workspace:^"
